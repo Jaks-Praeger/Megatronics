@@ -1,0 +1,85 @@
+// Pins for top motor
+// TOP_MOTOR_CCW turns motor CCW, and TOP_MOTOR_CCW turns it CW. Both send the number of pulses the step motor needs to move
+#define TOP_MOTOR_CCW 5
+#define TOP_MOTOR_CW 6
+
+#define TOP_MOTOR_PUL_PER_DEG 40000/360 // Based on motor resolution - 40k pulses for a full rotation
+#define TOP_MOTOR_PUL_FREQ 500000 // 20kHz (adjustable, min 1µs width, max 500kHz)
+#define TOP_MOTOR_PUL_TIME_DELAY_mS (1000.0)/(2.0*TOP_MOTOR_PUL_FREQ) // microseconds of delay in moving the pulse up or down depending on freq
+                                              // (divided by 2 bc has to go up and then down in one period)
+
+double topMotorLastPosition = 0; // Assuming the motor starts zero degrees from horizontal on the left side. This keeps track of position as the motor moves
+
+// Preps pins for outputs and sets them to their initial states
+void setup() {
+    pinMode(TOP_MOTOR_CCW, OUTPUT);
+    pinMode(TOP_MOTOR_CW, OUTPUT);
+    
+    digitalWrite(TOP_MOTOR_CW, HIGH); // Default stationary state
+    digitalWrite(TOP_MOTOR_CCW, HIGH); // Default stationary state
+
+    // Start communication for debugging
+    Serial.begin(9600);
+}
+
+// Where to run motion commands
+void loop() {
+  Serial.print("here");
+  delay(1000);
+  Serial.print("here");
+  moveTopMotorRelative(360);
+}
+
+// takes in the proposed change in position (in degrees) (double) and compares it to bounds to determine if the move is feasible (returns true if feasible)
+bool validateTopMotorMove(double deltaPosition){
+  double potentialPosition = topMotorLastPosition + deltaPosition;
+  int lowerBound = -1800000;
+  int upperBound = 1800000;
+
+  // test potential position against bounds
+  if(potentialPosition < lowerBound || potentialPosition > upperBound){
+    return(false);
+  } else {
+    return(true);
+  }
+}
+
+// Uses the last saved position to calculate how much the motor has to move to get to the new position. Input: absolute degree position from left horizontal to move to (double)
+void moveTopMotorToPos(double newPosition){
+  double deltaPosition = newPosition - topMotorLastPosition;
+  Serial.println(deltaPosition);
+  moveTopMotorRelative(deltaPosition);
+}
+
+// moves a relative amount of degrees. Input: degrees to move (CCW is positive) (double)
+void moveTopMotorRelative(double deltaPosition){
+  if(!validateTopMotorMove(deltaPosition)){ // if unable to validate the move
+    Serial.println("Top Motor cannot move to position. Out of bounds. Command cancelled.");
+    return; // Cannot move there
+  }
+
+  // Set up movement parameters
+  int pulPin = ((deltaPosition) < 0 ? TOP_MOTOR_CW : TOP_MOTOR_CCW); // Assumes a negative degree is CW, and a positive degree input is CCW (right hand rule)
+  double pulses;
+  pulses = abs(deltaPosition) * TOP_MOTOR_PUL_PER_DEG;
+
+  // Start moving the motor
+  Serial.println(pulses);
+  for (long i = 0; i < pulses; i++) {  // Send exact number of pulses specified
+    for(int j = 0; j<20; j++){
+      digitalWrite(pulPin, LOW);
+      delay(TOP_MOTOR_PUL_TIME_DELAY_mS);
+      digitalWrite(pulPin, HIGH);
+      delay(TOP_MOTOR_PUL_TIME_DELAY_mS);
+    }
+  }
+  Serial.println("done w loop");
+
+  // track new position and let user know
+  topMotorLastPosition = topMotorLastPosition + deltaPosition;
+  Serial.print("Top Motor successfully moved ");
+  Serial.print(deltaPosition);
+  Serial.print(" degrees, leaving the motor at a position of ");
+  Serial.print(topMotorLastPosition);
+  Serial.println(" degrees.");
+}
