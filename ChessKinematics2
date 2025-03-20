@@ -6,6 +6,7 @@ import os
 import math
 from IPython.display import HTML
 import time
+import serial
 
 # This is an improved visualization class to fix the blank GIF issue
 class ImprovedRobotVisualizer:
@@ -436,6 +437,28 @@ class ChessRobot:
         self.move_step_size = 5  # degrees per step
         self.z_clearance = 10.0  # cm above pieces for safe movement
 
+        self.ser = self.setup_serial()
+
+    def setup_serial(self, port='/dev/ttyACM0', baud_rate=9600):
+        """Set up serial connection to Arduino"""
+        ser = serial.Serial(port, baud_rate, timeout=1)
+        time.sleep(2)  # Allow connection to establish
+        return ser
+
+    def sendAngleArray(self, angles):
+        """
+        Send an array of 3 angles to Arduino
+        
+        Args:
+            ser: Serial connection object
+            angles: List of 3 angle values
+        """
+        # Format the three angles with comma separators
+        data_string = f"{angles[0]},{angles[1]},{angles[2]}\n"
+        
+        # Send the data
+        self.ser.write(data_string.encode())
+
     def algebraic_to_coordinate(self, chess_position):
         """
         Convert chess algebraic notation (e.g., 'e4') to board coordinates.
@@ -599,51 +622,7 @@ class ChessRobot:
             None
         """
         
-        self.movebase(angles[0])
-        self.moveshoulder(angles[1])
-        self.moveelbow(angles[2])
-
-    def movebase(self, angle):
-        """
-        Move the base motor to the specified angle.
-        
-        Args:
-            angle: Target angle in degrees
-            
-        Returns:
-            None
-        """
-        
-        # print(f"Moving base motor to {angle:.1f}°")
-        time.sleep(0.5)  # Time for motor to move
-
-    def moveshoulder(self, angle):
-        """
-        Move the shoulder motor to the specified angle.
-        
-        Args:
-            angle: Target angle in degrees
-            
-        Returns:
-            None
-        """
-        
-        # print(f"Moving shoulder motor to {angle:.1f}°")
-        time.sleep(0.5)  # Time for motor to move
-
-    def moveelbow(self, angle):
-        """
-        Move the elbow motor to the specified angle.
-        
-        Args:
-            angle: Target angle in degrees
-            
-        Returns:
-            None
-        """
-        
-        # print(f"Moving elbow motor to {angle:.1f}°")
-        time.sleep(0.5)  # Time for motor to move
+        self.sendAngleArray(angles)
 
     def actuate_gripper(self, close):
         """
