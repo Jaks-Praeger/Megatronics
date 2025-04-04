@@ -455,6 +455,10 @@ class ChessRobot:
         """
         # Format the three angles with comma separators
         data_string = f"{angles[0]},{angles[1]},{angles[2]}\n"
+        print_string = f"Printing from RPi: {angles[0]},{angles[1]},{angles[2]}\n"
+        print(print_string)
+
+        time.sleep(0.5);
         
         # Send the data
         self.ser.write(data_string.encode())
