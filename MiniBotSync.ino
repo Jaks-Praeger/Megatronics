@@ -31,6 +31,7 @@ void setup() {
   // Set reasonable speed and acceleration for smoother movement
   ShoulderStepper.setMaxSpeed(20000);
   ShoulderStepper.setAcceleration(2000.0);
+  ShoulderStepper.setSpeed(16000);
 
   elbowServo.attach(12);
 
@@ -40,7 +41,7 @@ void setup() {
   int rawShoulder = analogRead(potPins[1]);
   int mappedShoulder = map(rawShoulder, startingPos[1], endingPos[1], startingAngle[1], endingAngle[1]);
   previousShoulderTarget = (mappedShoulder + newZeroPos) * stepsPerRevolution / 360;
-  ShoulderStepper.setCurrentPosition(previousShoulderTarget);
+  // ShoulderStepper.setCurrentPosition(previousShoulderTarget);
   
   // Initialize servo position
   int rawElbow = analogRead(potPins[2]);
@@ -91,17 +92,8 @@ void loop() {
   Serial.print("ELBOW: ");
   Serial.println(angles[2]);
 
-  // Smooth movement for shoulder stepper using exponential moving average
-  long targetShoulderSteps = (angles[1] + newZeroPos) * stepsPerRevolution / 360;
-  long newShoulderTarget = previousShoulderTarget + 
-                          (targetShoulderSteps - previousShoulderTarget) * shoulderSmoothingFactor;
-  
-  // Set the target position and run the stepper (non-blocking)
-  ShoulderStepper.moveTo(newShoulderTarget);
-  ShoulderStepper.run();
-  
-  // Update previous target
-  previousShoulderTarget = newShoulderTarget;
+  long shoulderAngle = angles[1] + newZeroPos;
+  // ShoulderStepper.runToNewPosition(shoulderAngle*stepsPerRevolution / 360);
 
   // Constrain and smooth elbow movement
   int maxAngle = 163;
@@ -117,10 +109,5 @@ void loop() {
   previousElbowTarget = newElbowTarget;
   
   // Small delay to allow stepper to move
-  delay(5);
-  
-  // Run the stepper a bit more to ensure it continues moving
-  for (int i = 0; i < 5; i++) {
-    ShoulderStepper.run();
-  }
+  delay(10);
 }
