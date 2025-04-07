@@ -673,61 +673,6 @@ class ChessRobot:
         target_angles = self.inverse_kinematics(x, y, z)
         self.move_joints(target_angles)
 
-    def pick_and_place_piece(self, from_pos, to_pos):
-        """
-        Pick up a chess piece from one position and place it at another.
-        
-        Args:
-            from_pos: Starting chess position (e.g., 'e2')
-            to_pos: Target chess position (e.g., 'e4')
-            
-        Returns:
-            None
-        """
-        print(f"\nMoving piece from {from_pos} to {to_pos}")
-        
-        # Convert chess positions to coordinates
-        from_x, from_y = self.algebraic_to_coordinate(from_pos)
-        to_x, to_y = self.algebraic_to_coordinate(to_pos)
-        
-        # Calculate Z heights for different operations
-        piece_top_z = self.board_height + self.chess_square_size * 0.7  # Approximate chess piece height
-        hover_z = self.board_height + self.chess_square_size * 0.3      # Height to hover above pieces
-        grip_z = self.board_height + self.chess_square_size * 0.3       # Height to grip the piece
-        place_z = self.board_height + 0.1                               # Height to place the piece
-        
-        # 1. Open gripper
-        self.actuate_gripper(False)
-        
-        # 2. Move above the piece to pick
-        self.move_to_position(from_x, from_y, hover_z)
-        
-        # 3. Lower to grip the piece
-        self.move_to_position(from_x, from_y, grip_z, avoid_collisions=False)
-        
-        # 4. Close gripper to grab the piece
-        self.actuate_gripper(True)
-        
-        # 5. Lift the piece up
-        self.move_to_position(from_x, from_y, piece_top_z, avoid_collisions=False)
-        
-        # 6. Move to destination square at safe height
-        self.move_to_position(to_x, to_y, piece_top_z)
-        
-        # 7. Lower piece to the board
-        self.move_to_position(to_x, to_y, place_z, avoid_collisions=False)
-        
-        # 8. Release the piece
-        self.actuate_gripper(False)
-        
-        # 9. Move up away from the piece
-        self.move_to_position(to_x, to_y, hover_z, avoid_collisions=False)
-        
-        # 10. Return to home position
-        self.return_to_home()
-        
-        print(f"Successfully moved piece from {from_pos} to {to_pos}")
-
     def return_to_home(self):
         """Move the robot back to its home position."""
         print("Returning to home position")
@@ -780,10 +725,10 @@ class ChessRobot:
         # 10. Return to home position
         self.move_joints(self.home_position)
 
-    def capture_piece(self, from_pos, to_pos, captured_storage=(35, 35)):
+    def capture_piece(self, pos, captured_storage=(35, 35)):
         """Helper function to capture a piece and update visualization"""
         # Convert chess position to coordinates
-        to_x, to_y = self.algebraic_to_coordinate(to_pos)
+        to_x, to_y = self.algebraic_to_coordinate(pos)
         store_x, store_y = captured_storage
         
         # 1. Open gripper
@@ -809,9 +754,6 @@ class ChessRobot:
         
         # 7. Lift up from storage area
         self.move_to_position(store_x, store_y, self.board_height + self.chess_square_size * 0.7, avoid_collisions=False)
-        
-        # 8. Now move the capturing piece to the destination
-        self.move_piece(from_pos, to_pos)
 
     def calibrate(self):
         """
