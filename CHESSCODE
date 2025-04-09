@@ -1,0 +1,316 @@
+# Play a full game using Computer Vision
+# $env:PATH += ";C:\msys64\mingw64\bin"
+# Set-ExecutionPolicy Unrestricted -Scope Process
+# venv\Scripts\Activate
+
+import cv2
+import numpy as np
+import json
+import chess
+import chess.svg
+#from cairosvg import svg2png
+import chess.engine
+#from arm import ChessRobotArm
+from ChessKinematics2 import ChessRobot
+import random
+from stockfish import StockfishException
+
+############################# CONFIGURE ENGINE AND ELO #################################################################################################
+
+robot=ChessRobot()
+
+engine = chess.engine.SimpleEngine.popen_uci(r"stockfish\stockfish-windows-2022-x86-64-avx2.exe")
+
+engine.configure({"UCI_LimitStrength": True, "UCI_Elo": 1500})
+
+############################# LOAD JSON AND FIND BOARD SQUARES #########################################################################################
+
+with open('src/new_boxes.json', 'r') as fp:
+    sq_points = json.load(fp)
+   
+    # Image cropping coordinates
+    TopL_Y=int(sq_points["a8"][1][1])
+    TopL_X=int(sq_points["a8"][1][0])
+    TopR_X=int(sq_points["h8"][2][0])
+    BottomL_Y=int(sq_points["a1"][0][1])
+
+    y1 = TopL_Y - 20
+    y2 = BottomL_Y + 60
+    x1 = TopL_X - 80
+    x2 = TopR_X + 30
+
+#Returns the square given a point within the square
+def find_square(x: float, y: float):
+    for square in sq_points:
+        points = np.array(sq_points[square], np.int32)
+        if cv2.pointPolygonTest(points, (x, y), False) > 0:
+            return square
+    return None
+
+############################## CAPTURE BOARD PHOTO AND OUTLINE SQUARES ON CAPTURED PHOTO ################################################################
+
+# Outline the squares and label them with standard chess notation
+def draw_outlines(sq_points: dict, frame, show_text=True) -> None:
+    for square, points in sq_points.items():
+        points = np.array(points, dtype=np.int32)
+        cv2.polylines(frame, [points], True, (255, 255, 255), thickness=1)
+
+#Show board using python-chess SVGRendering
+def show_board(board: chess.Board, size=750, move = None) -> None:
+        if move is not None:
+            sq1, sq2 = chess.parse_square(move[:2]), chess.parse_square(move[2:4])
+            svgwrap = chess.svg.board(board, size=size, fill=dict.fromkeys([sq1, sq2], '#ced264'))
+        else:
+            svgwrap = chess.svg.board(board, size=size)
+        #svg2png(svgwrap, write_to='src/output.png')
+        cv2.imshow('Game', cv2.imread('src/output.png'))
+
+# Capture board and find image size
+cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)
+frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+# Initialize photos
+initial = []
+final = []
+bounding_boxes = []
+centers = []
+highlights = set()
+
+# Show board UI
+board = chess.Board()
+#robot = ChessRobotArm(22, 22.5, port = 'COM3') #Initialize a 3DOF Robotic Arm with L1=22, L2=21, at port COM3
+comp_move = True
+show_board(board)
+cv2.waitKey(2)
+
+############################# PLAY GAME, WHILE GAME CAN BE PLAYED ###################################################################
+
+while not board.is_game_over():
+    ret, frame = cap.read()
+   
+    draw_outlines(sq_points, frame)
+    cv2.imshow('Frame', frame)
+
+    ################### MOVE WITHIN STOCKFISH ENGINE ###################
+    if comp_move:
+        try:
+            result = engine.play(board, chess.engine.Limit(time=random.random()))
+            comp_move = result.move.uci()
+            (sq1, sq2) = (comp_move[:2], comp_move[2:4])
+
+            # Before pushing any move
+            previous_board = board.copy()
+
+            # If move results in capture, discard that piece
+            if board.is_capture(result.move):
+                pass
+                robot.capture_piece(sq2)
+
+            #For straight pawn moves:
+            robot.move_piece(sq1, sq2)
+
+            if comp_move == 'e1g1' and board.piece_type_at(chess.E1) == chess.KING: #Kingside
+                pass
+                robot.move_piece('h1', 'f1')
+            elif comp_move == 'e1c1' and board.piece_type_at(chess.E1) == chess.KING: #Queenside
+                pass
+                robot.move_piece('a1', 'd1')
+       
+            board.push(result.move)
+            print('Robot plays', result.move.uci())
+            show_board(board, move=str(result.move))
+            comp_move = False
+        # If an illegal move is played, go back to the previous game state
+        except (chess.IllegalMoveError, StockfishException):
+            board.pop()
+            engine.position(board)
+            uci = input("Manual override: ")
+            move = chess.Move.from_uci(uci)
+            board.push(move)
+            engine.position(board)
+
+    for (x, y, w, h) in bounding_boxes:
+        cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+    for (x, y) in centers:
+        square = find_square(x, y)
+        highlights.add(square)
+   
+    key = cv2.waitKey(10) & 0xFF
+    #if cv2.waitKey(1) & 0xFF == ord('r'):
+    if key == ord('r'):
+
+        if len(initial)==0:
+            initial = frame
+           
+           
+            # Adds white border around picture
+            initial_full = initial.copy()
+            height, width = initial_full.shape[:2]
+            white_initial = np.full((height, width, 3), 255, dtype=np.uint8)
+            initial_crop = initial_full[y1:y2, x1:x2]
+            white_initial[y1:y2, x1:x2] = initial_crop
+            initial = white_initial
+
+            print("Recording")
+        elif len(final)==0:
+            print('Move captured Successfully')
+            final = frame
+           
+            final_full = frame.copy()
+            height, width = final_full.shape[:2]
+            white_final = np.full((height, width, 3), 255, dtype=np.uint8)
+            final_crop = final_full[y1:y2, x1:x2]
+            white_final[y1:y2, x1:x2] = final_crop
+            final = white_final
+           
+            #Get the absolute difference between the initial and final frames.
+            gray1 = cv2.cvtColor(initial, cv2.COLOR_BGR2GRAY)
+            # Save before and after images
+            #cv2.imwrite("initial.jpg", initial)
+
+            gray2 = cv2.cvtColor(final, cv2.COLOR_BGR2GRAY)
+            #cv2.imwrite("final.jpg", final)
+           
+            diff = cv2.absdiff(gray1, gray2)
+            # Save diff ebfore thresholding
+            #np.savetxt("DiffBefore.txt",diff,fmt='%d')
+            _, diff = cv2.threshold(diff, 50, 255, cv2.THRESH_BINARY)
+            # Save diff after thresholding
+            #np.savetxt("DiffOut.txt",diff,fmt='%d')
+
+            #Remove noise from the difference frame
+            diff = cv2.dilate(diff, None, iterations=4)
+            kernel_size = 3
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kernel_size, kernel_size))
+            diff = cv2.erode(diff, kernel, iterations=6)
+           
+            #Find relevant contours
+            contours, _ = cv2.findContours(diff, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            sorted_contours_and_areas = sorted(zip(contours, [cv2.contourArea(c) for c in contours]), key=lambda x: x[1], reverse=True)
+            try:
+                contours = [sorted_contours_and_areas[0][0], sorted_contours_and_areas[1][0]]
+                cv2.drawContours(frame, contours, 1, (255, 0, 0), 4)
+               
+                #Find the bounding boxes of the contours
+                bounding_boxes = [cv2.boundingRect(c) for c in contours]
+
+                # Find the center point of the bounding boxes
+                centers = [(x + w//2, y + 0.7*h) for (x, y, w, h) in bounding_boxes]
+                highlights = set()
+                for p in centers:
+                    highlights.add(find_square(*p))
+                initial = []
+                final = []
+            except:
+                highlights = set()
+                highlights.add('rand')
+                highlights.add('placeholder')
+                initial = []
+                final = []
+         
+            if len(highlights) == 2:
+                try:
+                    sq1, sq2 = highlights.pop(), highlights.pop()
+
+                    if not (sq1 in chess.SQUARE_NAMES and sq2 in chess.SQUARE_NAMES):
+                        raise ValueError("Invalid square(s) detected")
+
+                    if board.color_at(chess.parse_square(sq1)) == board.turn:
+                        start, end = sq1, sq2
+                    else:
+                        start, end = sq2, sq1
+
+                    uci = start + end
+
+                    # Save the board state in case we need to revert
+                    previous_board = board.copy()
+                    board.push_uci(uci)
+
+                # If illegal move is played
+                except Exception as e:
+                    print(f"Couldn't record proper move: {e}")
+                   
+                    valid_move = False
+                    while not valid_move:
+                        uci = input("Enter move manually (e.g. e2e4): ").strip()
+                        try:
+                            board.push_uci(uci)
+                            valid_move = True
+                        # Asks to input new valid move
+                        except Exception as ex:
+                            print(f"Invalid move '{uci}': {ex}. Try again.")
+                show_board(board, move=uci)
+                highlights = set()
+                centers = []
+                comp_move = True
+
+    #Black castles 0-0
+    elif key == ord('m'):
+    #if cv2.waitKey(3) & 0xFF == ord('m'):
+        move = 'e8g8'
+        board.push_uci('e8g8')
+        show_board(board, move=move)
+        bounding_boxes = []
+        comp_move = True
+
+    #Black castles 0-0-0
+    elif key == ord('n'):
+    #if cv2.waitKey(4) & 0xFF == ord('n'):
+        move = 'e8c8'
+        board.push_uci('e8c8')
+        show_board(board, move=move)
+        bounding_boxes = []
+        comp_move = True
+
+    # Resignation
+    elif key == ord('x'):
+    #if cv2.waitKey(1) & 0xFF == ord('x'):
+        print("Player resigned!")
+        message = "Player Resigned — White Wins!"
+        break
+
+    #Exit command
+    elif key == ord('q'):
+    #if cv2.waitKey(2) & 0xFF == ord('q'):
+        break
+
+    cv2.imshow('Frame', frame)
+
+# Show final board and message
+if board.is_checkmate():
+    message = "Checkmate!"
+elif board.is_stalemate():
+    message = "Stalemate!"
+elif board.is_insufficient_material():
+    message = "Draw by insufficient material"
+elif board.is_seventyfive_moves():
+    message = "Draw by 75-move rule"
+elif board.is_fivefold_repetition():
+    message = "Draw by repetition"
+elif board.is_variant_draw():
+    message = "Variant draw"
+else:
+    message = "Game over"
+
+# Display final board and message
+show_board(board)
+print(message)
+
+# Wait a few seconds then close
+cv2.waitKey(3000)  # Show for 3 seconds
+cv2.destroyAllWindows()
+cap.release()
+engine.quit()
+
+# Force exit the program in case something lingers
+import sys
+sys.exit()
+
+# Display message with OpenCV
+img = cv2.imread('src/output.png')
+font = cv2.FONT_HERSHEY_SIMPLEX
+cv2.putText(img, message, (50, 100), font, 2, (0, 0, 255), 4, cv2.LINE_AA)
+cv2.imshow('Game Over', img)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
