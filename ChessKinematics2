@@ -740,7 +740,7 @@ class ChessRobot:
         
         # 3. Update visualization piece state if enabled
         if hasattr(self, 'visualizer'):
-            self.visualizer.update_piece_position(to_pos, None, is_capture=True)
+            self.visualizer.update_piece_position(pos, None, is_capture=True)
         
         # 4. Lift the captured piece
         self.move_to_position(to_x, to_y, self.board_height + self.chess_square_size * 0.7, avoid_collisions=False)
