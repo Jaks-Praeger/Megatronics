@@ -19,13 +19,14 @@ from stockfish import StockfishException
 
 robot=ChessRobot()
 
-engine = chess.engine.SimpleEngine.popen_uci(r"stockfish\stockfish-windows-2022-x86-64-avx2.exe")
+path = r"C:\Users\dafe2002\Downloads\stockfish-windows-x86-64-avx2\stockfish\stockfish-windows-x86-64-avx2.exe"
+engine = chess.engine.SimpleEngine.popen_uci(path)
 
 engine.configure({"UCI_LimitStrength": True, "UCI_Elo": 1500})
 
 ############################# LOAD JSON AND FIND BOARD SQUARES #########################################################################################
 
-with open('src/new_boxes.json', 'r') as fp:
+with open('new_boxes.json', 'r') as fp:
     sq_points = json.load(fp)
    
     # Image cropping coordinates
@@ -63,7 +64,7 @@ def show_board(board: chess.Board, size=750, move = None) -> None:
         else:
             svgwrap = chess.svg.board(board, size=size)
         #svg2png(svgwrap, write_to='src/output.png')
-        cv2.imshow('Game', cv2.imread('src/output.png'))
+        #cv2.imshow('Game', cv2.imread('src/output.png'))
 
 # Capture board and find image size
 cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)
@@ -90,7 +91,7 @@ while not board.is_game_over():
     ret, frame = cap.read()
    
     draw_outlines(sq_points, frame)
-    cv2.imshow('Frame', frame)
+    # cv2.imshow('Frame', frame)
 
     ################### MOVE WITHIN STOCKFISH ENGINE ###################
     if comp_move:
@@ -275,7 +276,7 @@ while not board.is_game_over():
     #if cv2.waitKey(2) & 0xFF == ord('q'):
         break
 
-    cv2.imshow('Frame', frame)
+    # cv2.imshow('Frame', frame)
 
 # Show final board and message
 if board.is_checkmate():
@@ -308,9 +309,9 @@ import sys
 sys.exit()
 
 # Display message with OpenCV
-img = cv2.imread('src/output.png')
-font = cv2.FONT_HERSHEY_SIMPLEX
-cv2.putText(img, message, (50, 100), font, 2, (0, 0, 255), 4, cv2.LINE_AA)
-cv2.imshow('Game Over', img)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+# img = cv2.imread('src/output.png')
+# font = cv2.FONT_HERSHEY_SIMPLEX
+# cv2.putText(img, message, (50, 100), font, 2, (0, 0, 255), 4, cv2.LINE_AA)
+# cv2.imshow('Game Over', img)
+# cv2.waitKey(0)
+# cv2.destroyAllWindows()
