@@ -48,13 +48,13 @@ void setup() {
 
   // Run calibration before limit switch becomes an interupt
   pinMode(humerusLS_pin, INPUT_PULLUP);
-  //calibrateShoulder();
-  //calibrateBase();
+  calibrateShoulder();
+  calibrateBase();
 
   // Set the hummerous outside limit switch to an interupt pin so it will have imediate control
   delay(2000);
-  //attachInterrupt(digitalPinToInterrupt(humerusLS_pin), limit_ISR, LOW);
-  //attachInterrupt(digitalPinToInterrupt(base_cal_pin), limit_ISR, LOW);
+  attachInterrupt(digitalPinToInterrupt(humerusLS_pin), limit_ISR, LOW);
+  attachInterrupt(digitalPinToInterrupt(base_cal_pin), limit_ISR, LOW);
 
   Serial.println("Arduino ready");
 
