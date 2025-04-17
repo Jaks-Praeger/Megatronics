@@ -15,7 +15,7 @@ const int humerusLS_pin = 18; //Limit switch on the back of the humerus
 const int base_cal_pin = 20;
 
 const int shoulderStepsPerRev = 200 * 20 * 4;  // change this to fit the number of steps per revolution (steps * gear ratio * 4)
-const int baseStepsPerRev = 800 * 4;  // change this to fit the number of steps per revolution (steps * gear ratio * 4)
+const int baseStepsPerRev = 1600 * 4;  // change this to fit the number of steps per revolution (steps * gear ratio * 4)
 
 //Initialize stepper and servo motors
 AccelStepper baseStepper(AccelStepper::FULL4WIRE, 2, 3, 4, 5); // Defaults to AccelStepper::FULL4WIRE (4 pins) on 2, 3, 4, 5
@@ -35,8 +35,8 @@ void setup() {
   gripperServo.attach(gripperServoPin);
   baseStepper.setMaxSpeed(300);  // Steps per second (max value set by arduino clock speed)
   baseStepper.setAcceleration(200.0);  // Steps per secon^2 (6000 default)
-  shoulderStepper.setMaxSpeed(50000);  // Steps per second (max value set by arduino clock speed)
-  shoulderStepper.setAcceleration(2000.0);  // Steps per secon^2 (6000 default)
+  shoulderStepper.setMaxSpeed(300);  // Steps per second (max value set by arduino clock speed) 5000
+  shoulderStepper.setAcceleration(200.0);  // Steps per secon^2 (2000 default)
 
   shoulderStepper.setCurrentPosition(0);
   baseStepper.setCurrentPosition(0);
@@ -48,13 +48,13 @@ void setup() {
 
   // Run calibration before limit switch becomes an interupt
   pinMode(humerusLS_pin, INPUT_PULLUP);
-  calibrateShoulder();
-  calibrateBase();
+  //calibrateShoulder();
+  //calibrateBase();
 
   // Set the hummerous outside limit switch to an interupt pin so it will have imediate control
   delay(2000);
-  attachInterrupt(digitalPinToInterrupt(humerusLS_pin), limit_ISR, LOW);
-  attachInterrupt(digitalPinToInterrupt(base_cal_pin), limit_ISR, LOW);
+  //attachInterrupt(digitalPinToInterrupt(humerusLS_pin), limit_ISR, LOW);
+  //attachInterrupt(digitalPinToInterrupt(base_cal_pin), limit_ISR, LOW);
 
   Serial.println("Arduino ready");
 
