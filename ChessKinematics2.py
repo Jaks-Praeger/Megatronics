@@ -396,9 +396,9 @@ def setup_improved_visualization(robot):
         print("Make sure matplotlib and numpy are installed.")
 
 class ChessRobot:
-    def __init__(self, base_height=2.92735, link1_length=38.1, link2_length=38.1, 
-                 gripper_height=13.335, chess_square_size=4.07, board_height=2.5273,
-                 board_origin_x=-19.1, board_origin_y=31.625, linkage_angle_deg=90, linkage_length=8, home_position=(90, 90, 20)):
+    def __init__(self, base_height=2.8448, link1_length=37.2872, link2_length=36.83, 
+                 gripper_height=14.732, chess_square_size=4.07, board_height=2.5273,
+                 board_origin_x=-19.1, board_origin_y=31.625, linkage_angle_deg=99.8, linkage_length=4.9784, home_position=(90, 90, 20)):
         """
         Initialize the chess robot with specified dimensions and parameters.
         
@@ -439,7 +439,7 @@ class ChessRobot:
         
         # Movement parameters
         self.move_step_size = 5  # degrees per step
-        self.z_clearance = 10.0 + self.gripper_height  # cm above pieces for safe movement
+        self.z_clearance = 5.0 + self.gripper_height  # cm above pieces for safe movement
 
         self.sendActualCommands = False
 
