@@ -107,6 +107,7 @@ void setMotors(float angles[4]) {
   Serial.println(angles[2]);
   pos = map(angles[2], 0, 166, 0, 180);   // Linearly maps 0-166 onto 0-180 for the servo
   pos = pos + 6;  // adds 6 for the constant offset
+  // MAKE SURE THIS IS WITH RESPECT TO THE BASE OF THE ARM
   elbowServo.write(180 - pos);
 
   Serial.println("//////////////////////////////");
