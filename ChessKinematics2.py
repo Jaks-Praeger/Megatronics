@@ -396,9 +396,9 @@ def setup_improved_visualization(robot):
         print("Make sure matplotlib and numpy are installed.")
 
 class ChessRobot:
-    def __init__(self, base_height=10.0, link1_length=40.0, link2_length=40.0, 
-                 gripper_height=2.0, chess_square_size=5.0, board_height=1.0,
-                 board_origin_x=-20.0, board_origin_y=10.0, home_position=(90, 90, 20)):
+    def __init__(self, base_height=2.92735, link1_length=38.1, link2_length=38.1, 
+                 gripper_height=13.335, chess_square_size=4.07, board_height=2.5273,
+                 board_origin_x=-19.1, board_origin_y=31.625, linkage_angle_deg=90, linkage_length=8, home_position=(90, 90, 20)):
         """
         Initialize the chess robot with specified dimensions and parameters.
         
@@ -411,6 +411,8 @@ class ChessRobot:
             board_height: Height of the chess board in cm
             board_origin_x: X-coordinate of the chess board origin (a1 square) in cm
             board_origin_y: Y-coordinate of the chess board origin (a1 square) in cm
+            linkage_angle_deg: Angle of fixed linkage relative to base arm (degrees)
+            linkage_length: Length of fixed linkage in cm
             home_position: Default resting position as (base_angle, shoulder_angle, elbow_angle) in degrees
                            Note: elbow_angle is now the interior angle between links
         """
@@ -419,6 +421,8 @@ class ChessRobot:
         self.link1_length = link1_length
         self.link2_length = link2_length
         self.gripper_height = gripper_height
+        self.linkage_angle_deg = - 180 + linkage_angle_deg
+        self.linkage_length = linkage_length
         
         # Chess board parameters
         self.chess_square_size = chess_square_size
@@ -435,11 +439,16 @@ class ChessRobot:
         
         # Movement parameters
         self.move_step_size = 5  # degrees per step
-        self.z_clearance = 10.0  # cm above pieces for safe movement
+        self.z_clearance = 10.0 + self.gripper_height  # cm above pieces for safe movement
 
-        self.ser = self.setup_serial()
+        self.sendActualCommands = False
 
-        self.allowAngles = 0;
+        if self.sendActualCommands:
+            self.ser = self.setup_serial()
+
+        self.allowAngles = 0
+        if not self.sendActualCommands:
+            self.allowAngles = True
 
     def setup_serial(self, port='COM8', baud_rate=9600):
         """Set up serial connection to Arduino"""
@@ -468,13 +477,14 @@ class ChessRobot:
                 print(data)
 
         # Format the three angles with comma separators
-        data_string = f"{round(angles[0], 2), round(angles[1], 2), round(angles[2], 2)}\n"
+        data_string = f"{round(angles[0], 2), round(angles[1], 2), round(angles[2], 2), round(self.gripper_closed, 2)}\n"
         print(f"Printing from RPi: {data_string}\n")
 
         time.sleep(0.5)
         
         # Send the data
-        self.ser.write(data_string.encode())
+        if self.sendActualCommands:
+            self.ser.write(data_string.encode())
 
     def algebraic_to_coordinate(self, chess_position):
         """
@@ -504,45 +514,64 @@ class ChessRobot:
         return (x, y)
 
     def inverse_kinematics(self, x, y, z):
+
         """
         Calculate joint angles required to reach a given position.
-        
+
         Args:
             x, y, z: Target position coordinates in cm
-            
+
         Returns:
             tuple: (base_angle, shoulder_angle, elbow_angle) in degrees
         """
         # Calculate the distance from the base to the target point in the XY plane
         r_xy = math.sqrt(x**2 + y**2)
-        
+
         # Calculate the height relative to the shoulder joint
         height_from_shoulder = z - self.base_height
-        
+
         # Calculate the reach distance (from shoulder to target)
         reach = math.sqrt(r_xy**2 + height_from_shoulder**2)
-        
+
         # Check if the target is reachable
         max_reach = self.link1_length + self.link2_length
         if reach > max_reach:
             raise ValueError(f"Target position ({x}, {y}, {z}) is out of reach. Maximum reach is {max_reach} cm.")
-        
+
         # Calculate the base rotation angle
         base_angle = math.degrees(math.atan2(y, x))
-        
+
+        # Calculate the shoulder angle
+        alpha = math.degrees(math.atan2(height_from_shoulder, r_xy))
+        beta = math.degrees(math.acos((self.link1_length**2 + reach**2 - self.link2_length**2) / (2 * self.link1_length * reach)))
+        pre_shoulder_angle = alpha + beta
+        print(f"Pre-shoulder angle: {pre_shoulder_angle}")
+
+        # with that, subtract the linkage contribution to the target position
+        linkage_angle_rad = math.radians(self.linkage_angle_deg)
+        pre_shoulder_angle_rad = math.radians(pre_shoulder_angle)
+        linkage_x = self.linkage_length * math.cos(linkage_angle_rad + pre_shoulder_angle_rad)
+        linkage_y = self.linkage_length * math.sin(linkage_angle_rad + pre_shoulder_angle_rad)
+        print(f"Linkage contribution: {linkage_x}, {linkage_y}")
+
+        r_xy -= linkage_x
+        height_from_shoulder -= linkage_y
+        reach = math.sqrt(r_xy**2 + height_from_shoulder**2)
+
+        # Now recalculate the angles with the new target position
+        alpha = math.degrees(math.atan2(height_from_shoulder, r_xy))
+        beta = math.degrees(math.acos((self.link1_length**2 + reach**2 - self.link2_length**2) / (2 * self.link1_length * reach)))
+        shoulder_angle = alpha + beta
+        print(f"Actual shoulder angle: {shoulder_angle}")
+
         # Use the law of cosines to calculate the elbow angle
         cos_elbow = (self.link1_length**2 + self.link2_length**2 - reach**2) / (2 * self.link1_length * self.link2_length)
         # Clamp to valid range to avoid numerical errors
         cos_elbow = max(min(cos_elbow, 1.0), -1.0)  
-        
+
         # FIXED: Return the actual interior angle at the elbow
         elbow_angle = math.degrees(math.acos(cos_elbow))
-        
-        # Calculate the shoulder angle
-        alpha = math.degrees(math.atan2(height_from_shoulder, r_xy))
-        beta = math.degrees(math.acos((self.link1_length**2 + reach**2 - self.link2_length**2) / (2 * self.link1_length * reach)))
-        shoulder_angle = alpha + beta
-        
+
         return (base_angle, shoulder_angle, elbow_angle)
 
     def forward_kinematics(self, base_angle, shoulder_angle, elbow_angle):
@@ -806,29 +835,29 @@ def run_chess_robot_demo():
     robot = ChessRobot()
     
     # Set up improved visualization
-    setup_improved_visualization(robot)
+    # setup_improved_visualization(robot)
     
     # 1. King's pawn opening (e2 to e4)
-    print("\nMoving pawn from e2 to e4")
+    # print("\nMoving pawn from e2 to e4")
     robot.move_piece('e2', 'e8')
     
     # 2. Knight to f3
-    print("\nMoving knight from g1 to f3")
+    # print("\nMoving knight from g1 to f3")
     # robot.move_piece('g1', 'f3')
     
     # 3. Queen's pawn opening (d2 to d4)
-    print("\nMoving pawn from d2 to d4")
+    # print("\nMoving pawn from d2 to d4")
     # robot.move_piece('d2', 'd4')
     
     # 4. Knight captures on e4
-    print("\nCapturing with knight from f3 to e4")
+    # print("\nCapturing with knight from f3 to e4")
     # robot.capture_piece('f3', 'e4')
     
     # Save the animation
-    print("\nSaving animation...")
-    if hasattr(robot, 'visualizer'):
-        robot.visualizer.create_animation(filename="chess_robot_demo.gif", method="imageio", fps=10)
-    
+    # print("\nSaving animation...")
+    # if hasattr(robot, 'visualizer'):
+    #     robot.visualizer.create_animation(filename="chess_robot_demo.gif", method="imageio", fps=10)
+
     print("\nDemo completed!")
 
 if __name__ == "__main__":
