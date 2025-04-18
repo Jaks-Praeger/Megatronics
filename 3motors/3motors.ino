@@ -10,14 +10,14 @@ int stepsPerRevolution = 200 * 20 * 4;  // change this to fit the number of step
 
 AccelStepper baseStepper(AccelStepper::FULL4WIRE, 2, 3, 4, 5); // Defaults to AccelStepper::FULL4WIRE (4 pins) on 2, 3, 4, 5
 AccelStepper shoulderStepper(AccelStepper::FULL4WIRE, 6, 7, 8, 9);
-Servo wristServo;
+Servo elbowServo;
 
 
 void setup() {
   Serial.begin(9600);
   //Serial.setTimeout(200);
 
-  wristServo.attach(servoPin);  // attaches the servo on pin 9 to the Servo object
+  elbowServo.attach(servoPin);  // attaches the servo on pin 9 to the Servo object
   baseStepper.setMaxSpeed(100000);  // Steps per second (max value set by arduino clock speed)
   baseStepper.setAcceleration(6000.0);  // Steps per secon^2 (6000 default)
   shoulderStepper.setMaxSpeed(100000);  // Steps per second (max value set by arduino clock speed)
@@ -69,7 +69,7 @@ void setMotors(float angles[3]) {
 
   pos = map(angles[2], 0, 166, 0, 180);   // Linearly maps 0-166 onto 0-180 for the servo
   pos = pos + 6;  // adds 6 for the constant offset
-  wristServo.write(180 - pos);
+  elbowServo.write(180 - pos);
 }
 
 
