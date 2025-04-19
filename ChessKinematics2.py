@@ -439,7 +439,7 @@ class ChessRobot:
         
         # Movement parameters
         self.move_step_size = 5  # degrees per step
-        self.z_clearance = 5.0 + self.gripper_height  # cm above pieces for safe movement
+        self.z_clearance = 10.0 + self.gripper_height  # cm above pieces for safe movement
 
         self.sendActualCommands = False
 
@@ -728,10 +728,10 @@ class ChessRobot:
         to_x, to_y = self.algebraic_to_coordinate(to_pos)
         
         # Calculate Z heights
-        piece_top_z = self.board_height + self.chess_square_size * 0.7
-        hover_z = self.board_height + self.chess_square_size * 0.3
-        grip_z = self.board_height + self.chess_square_size * 0.3
-        place_z = self.board_height + 0.1
+        piece_top_z = self.board_height + self.z_clearance + 10
+        hover_z = self.board_height + self.z_clearance + 10
+        grip_z = self.board_height + self.z_clearance
+        place_z = self.board_height + self.z_clearance
         
         # 1. Open gripper
         self.actuate_gripper(False)
@@ -839,7 +839,7 @@ def run_chess_robot_demo():
     
     # 1. King's pawn opening (e2 to e4)
     # print("\nMoving pawn from e2 to e4")
-    robot.move_piece('e2', 'e8')
+    robot.move_piece('e1', 'e8')
     
     # 2. Knight to f3
     # print("\nMoving knight from g1 to f3")
