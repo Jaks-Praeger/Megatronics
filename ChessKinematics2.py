@@ -398,7 +398,8 @@ def setup_improved_visualization(robot):
 class ChessRobot:
     def __init__(self, base_height=2.92735, link1_length=38.1, link2_length=38.1, 
                  gripper_height=13.335, chess_square_size=4.07, board_height=2.5273,
-                 board_origin_x=-19.1, board_origin_y=31.625, linkage_angle_deg=90, linkage_length=8, home_position=(90, 90, 20)):
+                 board_origin_x=-19.1, board_origin_y=31.625, linkage_angle_deg=90.0,
+                 linkage_length=8.0, baseDistFromOrigin=0.0, gripperDistFromOrigin=0.0, home_position=(90, 90, 20)):
         """
         Initialize the chess robot with specified dimensions and parameters.
         
@@ -423,6 +424,8 @@ class ChessRobot:
         self.gripper_height = gripper_height
         self.linkage_angle_deg = - 180 + linkage_angle_deg
         self.linkage_length = linkage_length
+        self.baseDistFromOrigin = baseDistFromOrigin
+        self.gripperDistFromOrigin = gripperDistFromOrigin
         
         # Chess board parameters
         self.chess_square_size = chess_square_size
@@ -439,7 +442,8 @@ class ChessRobot:
         
         # Movement parameters
         self.move_step_size = 5  # degrees per step
-        self.z_clearance = 10.0 + self.gripper_height  # cm above pieces for safe movement
+        self.z_clearance = 5.0 + self.gripper_height  # cm above pieces for grabbing
+        self.z_clearance_moving = self.z_clearance + 10.0  # cm above pieces for moving
 
         self.sendActualCommands = False
 
@@ -702,13 +706,13 @@ class ChessRobot:
         
         if avoid_collisions:
             # First move up to clearance height if needed
-            if current_z < self.board_height + self.z_clearance:
+            if current_z < self.board_height + self.z_clearance_moving:
                 clearance_angles = self.inverse_kinematics(current_x, current_y, 
-                                                          self.board_height + self.z_clearance)
+                                                          self.board_height + self.z_clearance_moving)
                 self.move_joints(clearance_angles)
             
             # Then move in XY plane at safe height
-            safe_height_angles = self.inverse_kinematics(x, y, self.board_height + self.z_clearance)
+            safe_height_angles = self.inverse_kinematics(x, y, self.board_height + self.z_clearance_moving)
             self.move_joints(safe_height_angles)
         
         # Finally move to the exact target position
