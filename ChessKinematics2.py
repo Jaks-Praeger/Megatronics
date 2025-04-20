@@ -396,10 +396,10 @@ def setup_improved_visualization(robot):
         print("Make sure matplotlib and numpy are installed.")
 
 class ChessRobot:
-    def __init__(self, base_height=2.92735, link1_length=38.1, link2_length=38.1, 
-                 gripper_height=13.335, chess_square_size=4.07, board_height=2.5273,
-                 board_origin_x=-19.1, board_origin_y=31.625, linkage_angle_deg=90.0,
-                 linkage_length=8.0, baseDistFromOrigin=0.0, gripperDistFromOrigin=0.0, home_position=(90, 90, 20)):
+    def __init__(self, base_height=2.8448, link1_length=37.2872, link2_length=36.83, 
+                 gripper_height=14.732, chess_square_size=4.07, board_height=2.5273,
+                 board_origin_x=-19.1, board_origin_y=31.625, linkage_angle_deg=99.8,
+                 linkage_length=4.9784, baseDistFromOrigin=0.0, gripperDistFromOrigin=0.0, home_position=(90, 90, 20)):
         """
         Initialize the chess robot with specified dimensions and parameters.
         
@@ -732,10 +732,10 @@ class ChessRobot:
         to_x, to_y = self.algebraic_to_coordinate(to_pos)
         
         # Calculate Z heights
-        piece_top_z = self.board_height + self.chess_square_size * 0.7
-        hover_z = self.board_height + self.chess_square_size * 0.3
-        grip_z = self.board_height + self.chess_square_size * 0.3
-        place_z = self.board_height + 0.1
+        piece_top_z = self.board_height + self.z_clearance + 10
+        hover_z = self.board_height + self.z_clearance + 10
+        grip_z = self.board_height + self.z_clearance
+        place_z = self.board_height + self.z_clearance
         
         # 1. Open gripper
         self.actuate_gripper(False)
@@ -843,7 +843,7 @@ def run_chess_robot_demo():
     
     # 1. King's pawn opening (e2 to e4)
     # print("\nMoving pawn from e2 to e4")
-    robot.move_piece('e2', 'e8')
+    robot.move_piece('e1', 'e8')
     
     # 2. Knight to f3
     # print("\nMoving knight from g1 to f3")
