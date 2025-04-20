@@ -8,398 +8,11 @@ from IPython.display import HTML
 import time
 import serial
 
-# This is an improved visualization class to fix the blank GIF issue
-class ImprovedRobotVisualizer:
-    def __init__(self, robot):
-        self.robot = robot
-        
-        # Store robot parameters for reference
-        self.base_height = robot.base_height
-        self.link1_length = robot.link1_length
-        self.link2_length = robot.link2_length
-        self.chess_square_size = robot.chess_square_size
-        self.board_height = robot.board_height
-        self.board_origin_x = robot.board_origin_x
-        self.board_origin_y = robot.board_origin_y
-        
-        # Create figure and ax for 3D visualization
-        plt.ioff()  # Turn off interactive mode to avoid displaying plots
-        self.fig = plt.figure(figsize=(12, 10))
-        self.ax = self.fig.add_subplot(111, projection='3d')
-        
-        # Store raw data for animation instead of rendered frames
-        self.animation_data = []
-        self.pieces = {}  # Chess pieces on the board
-        
-        # Colors for visualization
-        self.colors = {
-            'base': 'gray',
-            'link1': 'blue',
-            'link2': 'green',
-            'gripper': 'red',
-            'chess_light': 'wheat',
-            'chess_dark': 'saddlebrown',
-            'piece_white': 'whitesmoke',
-            'piece_black': 'dimgray'
-        }
-        
-        # Initial setup of the board
-        self.setup_initial_pieces()
-        
-    def setup_initial_pieces(self):
-        """Set up initial chess pieces for the simulation."""
-        # White pawns on rank 2
-        for file_idx in range(8):
-            file_char = chr(ord('a') + file_idx)
-            self.pieces[f"{file_char}2"] = ('white', False)
-        
-        # Black pawns on rank 7
-        for file_idx in range(8):
-            file_char = chr(ord('a') + file_idx)
-            self.pieces[f"{file_char}7"] = ('black', False)
-        
-        # White pieces on rank 1
-        for file_idx in range(8):
-            file_char = chr(ord('a') + file_idx)
-            self.pieces[f"{file_char}1"] = ('white', False)
-        
-        # Black pieces on rank 8
-        for file_idx in range(8):
-            file_char = chr(ord('a') + file_idx)
-            self.pieces[f"{file_char}8"] = ('black', False)
-    
-    def update_piece_position(self, from_pos, to_pos, is_capture=False):
-        """Update the chess piece positions in the visualization."""
-        if from_pos in self.pieces:
-            piece_color, _ = self.pieces[from_pos]
-            self.pieces[from_pos] = (piece_color, True)  # Mark as captured/moved
-            
-            if is_capture and to_pos in self.pieces:
-                # Mark captured piece as captured
-                captured_color, _ = self.pieces[to_pos]
-                self.pieces[to_pos] = (captured_color, True)
-            
-            # Place moving piece in new position (only if to_pos is not None)
-            if to_pos is not None:
-                self.pieces[to_pos] = (piece_color, False)
-    
-    def append_frame(self, angles, gripper_closed):
-        """
-        Store robot state for a frame instead of rendering immediately
-        """
-        # Store the data needed to render the frame later
-        self.animation_data.append({
-            'angles': angles.copy() if isinstance(angles, list) else list(angles),
-            'gripper_closed': gripper_closed,
-            'pieces': {k: v for k, v in self.pieces.items()}  # Make a copy of the current piece state
-        })
-    
-    def get_joint_positions(self, angles):
-        """Calculate positions of all joints for visualization."""
-        base_angle, shoulder_angle, elbow_angle = angles
-        
-        # Base position
-        base_pos = (0, 0, 0)
-        
-        # Shoulder position
-        shoulder_pos = (0, 0, self.base_height)
-        
-        # Convert angles to radians
-        base_rad = math.radians(base_angle)
-        shoulder_rad = math.radians(shoulder_angle)
-        # FIXED: Use elbow angle directly as the interior angle between links
-        elbow_rad = math.radians(elbow_angle)
-        
-        # Calculate elbow position
-        elbow_x = self.link1_length * math.cos(shoulder_rad) * math.cos(base_rad)
-        elbow_y = self.link1_length * math.cos(shoulder_rad) * math.sin(base_rad)
-        elbow_z = self.base_height + self.link1_length * math.sin(shoulder_rad)
-        elbow_pos = (elbow_x, elbow_y, elbow_z)
-        
-        # FIXED: Calculate the absolute angle of the second link
-        # The second link angle is relative to the horizontal plane
-        # It's determined by the shoulder angle and the interior elbow angle
-        second_link_angle = shoulder_rad - (math.pi - elbow_rad)
-        
-        # Calculate end effector position
-        ee_x = elbow_x + self.link2_length * math.cos(second_link_angle) * math.cos(base_rad)
-        ee_y = elbow_y + self.link2_length * math.cos(second_link_angle) * math.sin(base_rad)
-        ee_z = elbow_z + self.link2_length * math.sin(second_link_angle)
-        ee_pos = (ee_x, ee_y, ee_z)
-        
-        return base_pos, shoulder_pos, elbow_pos, ee_pos
-    
-    def draw_robot(self, angles, gripper_closed=False):
-        """Draw the robot at the given joint angles."""
-        # Get joint positions
-        base_pos, shoulder_pos, elbow_pos, ee_pos = self.get_joint_positions(angles)
-        
-        # Draw base 
-        self.ax.plot([base_pos[0]], [base_pos[1]], [base_pos[2]], 'ko', markersize=10)
-        self.ax.plot([base_pos[0], shoulder_pos[0]], 
-                     [base_pos[1], shoulder_pos[1]], 
-                     [base_pos[2], shoulder_pos[2]], 
-                     color=self.colors['base'], linewidth=6)
-        
-        # Shoulder to elbow
-        self.ax.plot([shoulder_pos[0]], [shoulder_pos[1]], [shoulder_pos[2]], 'ko', markersize=8)
-        self.ax.plot([shoulder_pos[0], elbow_pos[0]], 
-                     [shoulder_pos[1], elbow_pos[1]], 
-                     [shoulder_pos[2], elbow_pos[2]], 
-                     color=self.colors['link1'], linewidth=4)
-        
-        # Elbow to end effector
-        self.ax.plot([elbow_pos[0]], [elbow_pos[1]], [elbow_pos[2]], 'ko', markersize=6)
-        self.ax.plot([elbow_pos[0], ee_pos[0]], 
-                     [elbow_pos[1], ee_pos[1]], 
-                     [elbow_pos[2], ee_pos[2]], 
-                     color=self.colors['link2'], linewidth=3)
-        
-        # End effector (gripper)
-        gripper_width = 1.5 if gripper_closed else 3
-        gripper_x = [ee_pos[0] - gripper_width/2, ee_pos[0] + gripper_width/2]
-        gripper_y = [ee_pos[1], ee_pos[1]]
-        gripper_z = [ee_pos[2], ee_pos[2]]
-        
-        self.ax.plot(gripper_x, gripper_y, gripper_z, 
-                     color=self.colors['gripper'], linewidth=2)
-    
-    def draw_chessboard(self):
-        """Draw the chess board in 3D space."""
-        # Create the chess board grid
-        for i in range(8):  # files a-h
-            for j in range(8):  # ranks 1-8
-                x = self.board_origin_x + i * self.chess_square_size
-                y = self.board_origin_y + j * self.chess_square_size
-                z = self.board_height
-                
-                # Determine square color
-                color = self.colors['chess_light'] if (i + j) % 2 == 0 else self.colors['chess_dark']
-                
-                # Create a square as a rectangular plane
-                xx, yy = np.meshgrid([x, x + self.chess_square_size], 
-                                     [y, y + self.chess_square_size])
-                zz = np.ones_like(xx) * z
-                
-                self.ax.plot_surface(xx, yy, zz, color=color, edgecolor='black', linewidth=0.5, alpha=0.8)
-    
-    def draw_chess_piece(self, position, piece_color='white', captured=False):
-        """Draw a chess piece at the specified position."""
-        # Skip drawing if position is None or the piece is captured
-        if position is None or captured:
-            return
-            
-        if isinstance(position, str):
-            x, y = self.robot.algebraic_to_coordinate(position)
-        else:
-            x, y = position
-            
-        z = self.board_height
-        
-        # Piece height
-        piece_height = self.chess_square_size * 0.8
-        
-        # Create a simple cylinder to represent the piece
-        r = self.chess_square_size * 0.3  # Radius
-        theta = np.linspace(0, 2*np.pi, 20)
-        z_vals = np.linspace(z, z + piece_height, 10)
-        theta_grid, z_grid = np.meshgrid(theta, z_vals)
-        
-        x_grid = x + r * np.cos(theta_grid)
-        y_grid = y + r * np.sin(theta_grid)
-        
-        color = self.colors['piece_white'] if piece_color == 'white' else self.colors['piece_black']
-        self.ax.plot_surface(x_grid, y_grid, z_grid, color=color, alpha=0.9)
-    
-    def render_frame(self, frame_data):
-        """Render a complete frame based on stored data"""
-        # Clear the previous frame
-        self.ax.clear()
-        
-        # Draw the chess board
-        self.draw_chessboard()
-        
-        # Draw chess pieces based on their state for this frame
-        for pos, (color, captured) in frame_data['pieces'].items():
-            if not captured:
-                self.draw_chess_piece(pos, color, captured)
-        
-        # Draw the robot
-        self.draw_robot(frame_data['angles'], frame_data['gripper_closed'])
-        
-        # Set the axis properties
-        self.ax.set_xlabel('X (cm)')
-        self.ax.set_ylabel('Y (cm)')
-        self.ax.set_zlabel('Z (cm)')
-        
-        # Set view limits
-        max_dim = max(self.board_origin_x + 8*self.chess_square_size, 
-                      self.board_origin_y + 8*self.chess_square_size,
-                      self.base_height + self.link1_length + self.link2_length)
-        
-        # Add some margin
-        margin = 10
-        # self.ax.set_xlim([-margin, max_dim + margin])
-        # self.ax.set_ylim([-margin, max_dim + margin])
-        # self.ax.set_zlim([0, max_dim])
-        self.ax.set_xlim([self.board_origin_x - margin, self.board_origin_x + 8*self.chess_square_size + margin])
-        self.ax.set_ylim([self.board_origin_y - margin, self.board_origin_y + 8*self.chess_square_size + margin])
-        self.ax.set_zlim([0, self.base_height + self.link1_length + self.link2_length])
-        
-        # Set an isometric-like view
-        self.ax.view_init(elev=30, azim=45)
-        
-        # Set the title
-        self.ax.set_title('Chess Robot 3D Visualization')
-    
-    def save_individual_frames(self, output_dir="chess_robot_frames"):
-        """Save individual frames as png files"""
-        os.makedirs(output_dir, exist_ok=True)
-        
-        print(f"Generating {len(self.animation_data)} frames...")
-        for i, frame_data in enumerate(self.animation_data):
-            print(f"Rendering frame {i+1}/{len(self.animation_data)}", end='\r')
-            
-            # Clear and render the frame
-            self.render_frame(frame_data)
-            
-            # Save the frame as a PNG
-            filename = os.path.join(output_dir, f"frame_{i:04d}.png")
-            self.fig.savefig(filename, dpi=100, bbox_inches='tight')
-        
-        print(f"\nSaved {len(self.animation_data)} frames to {output_dir}/")
-        return output_dir
-    
-    def create_animation(self, filename="chess_robot_animation.gif", method="imageio", fps=10):
-        """
-        Create an animation from the stored frames
-        
-        Args:
-            filename: Output filename
-            method: Animation method ('imageio' or 'matplotlib')
-            fps: Frames per second
-        """
-        # Make sure output is a gif
-        if not filename.lower().endswith('.gif'):
-            filename = filename.rsplit('.', 1)[0] + '.gif'
-        
-        print("Starting animation creation process...")
-        
-        if method == "matplotlib":
-            # Try the matplotlib animation approach
-            try:
-                print("Creating animation using matplotlib...")
-                plt.ioff()
-                fig, ax = plt.subplots(figsize=(10, 8))
-                ax.axis('off')
-                
-                # Draw the first frame to set up the plot
-                self.render_frame(self.animation_data[0])
-                self.fig.canvas.draw()
-                img = np.array(self.fig.canvas.renderer.buffer_rgba())
-                
-                # Set up the plot
-                plot = ax.imshow(img)
-                
-                def update(frame_idx):
-                    self.render_frame(self.animation_data[frame_idx])
-                    self.fig.canvas.draw()
-                    plot.set_array(np.array(self.fig.canvas.renderer.buffer_rgba()))
-                    return [plot]
-                
-                # Create the animation
-                ani = FuncAnimation(fig, update, frames=len(self.animation_data), 
-                                    interval=1000/fps, blit=True)
-                
-                # Save the animation
-                ani.save(filename, writer='pillow', fps=fps)
-                plt.close(fig)
-                plt.close(self.fig)
-                print(f"Animation saved as {filename}")
-                return True
-                
-            except Exception as e:
-                print(f"Matplotlib animation failed: {e}")
-                print("Trying alternative method...")
-        
-        # If we reach here, use imageio method
-        try:
-            # First save individual frames
-            frames_dir = self.save_individual_frames(output_dir=f"{filename}_frames")
-            
-            # Use imageio to create the gif
-            try:
-                import imageio
-                
-                # Create the gif using imageio
-                print("Creating GIF using imageio...")
-                with imageio.get_writer(filename, mode='I', fps=fps) as writer:
-                    for i in range(len(self.animation_data)):
-                        frame_path = os.path.join(frames_dir, f"frame_{i:04d}.png")
-                        image = imageio.imread(frame_path)
-                        writer.append_data(image)
-                
-                print(f"Animation saved as {filename}")
-                return True
-                
-            except ImportError:
-                print("imageio not found, using PIL instead...")
-                
-                # Use PIL to create the gif
-                try:
-                    from PIL import Image
-                    
-                    frames = []
-                    for i in range(len(self.animation_data)):
-                        frame_path = os.path.join(frames_dir, f"frame_{i:04d}.png")
-                        frames.append(Image.open(frame_path))
-                    
-                    # Save the gif
-                    frames[0].save(
-                        filename,
-                        save_all=True,
-                        append_images=frames[1:],
-                        optimize=False,
-                        duration=1000/fps,
-                        loop=0
-                    )
-                    
-                    print(f"Animation saved as {filename}")
-                    return True
-                    
-                except Exception as e:
-                    print(f"PIL animation failed: {e}")
-                    print(f"Please check the individual frames in {frames_dir}/")
-        
-        except Exception as e:
-            print(f"Animation creation failed: {e}")
-            print("Falling back to saving individual frames...")
-            self.save_individual_frames()
-            
-        return False
-
-# This is a small utility function to replace the setup_visualization method in your ChessRobot class
-def setup_improved_visualization(robot):
-    """Set up the improved 3D visualization for the robot."""
-    try:
-        import matplotlib.pyplot as plt
-        from mpl_toolkits.mplot3d import Axes3D
-        import numpy as np
-        
-        print("Setting up improved 3D visualization...")
-        
-        # Create and attach the visualizer
-        robot.visualizer = ImprovedRobotVisualizer(robot)
-        
-    except ImportError as e:
-        print(f"Visualization could not be enabled: {e}")
-        print("Make sure matplotlib and numpy are installed.")
-
 class ChessRobot:
     def __init__(self, base_height=2.8448, link1_length=37.2872, link2_length=36.83, 
                  gripper_height=14.732, chess_square_size=4.07, board_height=2.5273,
                  board_origin_x=-19.1, board_origin_y=31.625, linkage_angle_deg=99.8,
-                 linkage_length=4.9784, baseDistFromOrigin=0.0, gripperDistFromOrigin=0.0, home_position=(90, 90, 20)):
+                 linkage_length=4.9784, baseDistFromOrigin=2.5, gripperDistFromOrigin=5.0, home_position=(90, 90, 20)):
         """
         Initialize the chess robot with specified dimensions and parameters.
         
@@ -441,7 +54,7 @@ class ChessRobot:
         self.gripper_closed = False
         
         # Movement parameters
-        self.move_step_size = 5  # degrees per step
+        self.move_step_size = 2  # degrees per step
         self.z_clearance = 5.0 + self.gripper_height  # cm above pieces for grabbing
         self.z_clearance_moving = self.z_clearance + 10.0  # cm above pieces for moving
 
@@ -528,13 +141,39 @@ class ChessRobot:
         Returns:
             tuple: (base_angle, shoulder_angle, elbow_angle) in degrees
         """
-        # Calculate the distance from the base to the target point in the XY plane
+
+        i = 0
+        iterations = 5
+        actual_x = x
+        actual_y = y
+        print(f"Initial target position: {x}, {y}, {z}")
+        base_angle = math.degrees(math.atan2(y, x))
+        print(f"Starting base angle: {base_angle}")
+
+        for i in range(iterations):
+            # Calculate the base rotation angle
+            base_angle = math.degrees(math.atan2(y, x))
+            # swapped sin and cos below because the shift is perpendicular to the base angle
+            base_x_shift = self.baseDistFromOrigin * math.sin(math.radians(base_angle))
+            base_y_shift = -self.baseDistFromOrigin * math.cos(math.radians(base_angle))
+            # this one is also perpendicular, but to the arm and in the opposite direction
+            gripper_x_shift = -self.gripperDistFromOrigin * math.sin(math.radians(base_angle))
+            gripper_y_shift = self.gripperDistFromOrigin * math.cos(math.radians(base_angle))
+
+            total_x_shift = base_x_shift + gripper_x_shift
+            total_y_shift = base_y_shift + gripper_y_shift
+            # print(f"Base angle: {base_angle}, X shift: {total_x_shift}, Y shift: {total_y_shift}")
+
+            # Adjust the target position based on the shifts
+            x = actual_x - total_x_shift
+            y = actual_y - total_y_shift
+
+        print(f"Adjusted target position: {x}, {y}, {z}")
+        print(f"Base angle after shifts: {base_angle}")
+
+        # Now that we have x and y, we can calculate the shoulder and elbow angles
         r_xy = math.sqrt(x**2 + y**2)
-
-        # Calculate the height relative to the shoulder joint
         height_from_shoulder = z - self.base_height
-
-        # Calculate the reach distance (from shoulder to target)
         reach = math.sqrt(r_xy**2 + height_from_shoulder**2)
 
         # Check if the target is reachable
@@ -542,25 +181,33 @@ class ChessRobot:
         if reach > max_reach:
             raise ValueError(f"Target position ({x}, {y}, {z}) is out of reach. Maximum reach is {max_reach} cm.")
 
-        # Calculate the base rotation angle
-        base_angle = math.degrees(math.atan2(y, x))
+        i = 0
+        linkage_angle_rad = math.radians(self.linkage_angle_deg)
+        actual_r_xy = r_xy
+        actual_height_from_shoulder = height_from_shoulder
 
-        # Calculate the shoulder angle
         alpha = math.degrees(math.atan2(height_from_shoulder, r_xy))
         beta = math.degrees(math.acos((self.link1_length**2 + reach**2 - self.link2_length**2) / (2 * self.link1_length * reach)))
         pre_shoulder_angle = alpha + beta
         print(f"Pre-shoulder angle: {pre_shoulder_angle}")
 
-        # with that, subtract the linkage contribution to the target position
-        linkage_angle_rad = math.radians(self.linkage_angle_deg)
-        pre_shoulder_angle_rad = math.radians(pre_shoulder_angle)
-        linkage_x = self.linkage_length * math.cos(linkage_angle_rad + pre_shoulder_angle_rad)
-        linkage_y = self.linkage_length * math.sin(linkage_angle_rad + pre_shoulder_angle_rad)
-        print(f"Linkage contribution: {linkage_x}, {linkage_y}")
 
-        r_xy -= linkage_x
-        height_from_shoulder -= linkage_y
-        reach = math.sqrt(r_xy**2 + height_from_shoulder**2)
+        for i in range(iterations):
+            # Calculate the shoulder angle
+            alpha = math.degrees(math.atan2(height_from_shoulder, r_xy))
+            beta = math.degrees(math.acos((self.link1_length**2 + reach**2 - self.link2_length**2) / (2 * self.link1_length * reach)))
+            pre_shoulder_angle = alpha + beta
+            # print(f"Pre-shoulder angle: {pre_shoulder_angle}")
+
+            # with that, subtract the linkage contribution to the target position
+            pre_shoulder_angle_rad = math.radians(pre_shoulder_angle)
+            linkage_x = self.linkage_length * math.cos(linkage_angle_rad + pre_shoulder_angle_rad)
+            linkage_y = self.linkage_length * math.sin(linkage_angle_rad + pre_shoulder_angle_rad)
+            # print(f"Linkage contribution: {linkage_x}, {linkage_y}")
+
+            r_xy = actual_r_xy - linkage_x
+            height_from_shoulder = actual_height_from_shoulder - linkage_y
+            reach = math.sqrt(r_xy**2 + height_from_shoulder**2)
 
         # Now recalculate the angles with the new target position
         alpha = math.degrees(math.atan2(height_from_shoulder, r_xy))
@@ -578,37 +225,64 @@ class ChessRobot:
 
         return (base_angle, shoulder_angle, elbow_angle)
 
-    def forward_kinematics(self, base_angle, shoulder_angle, elbow_angle):
+    def forward_kinematics_improved(self, base_angle, shoulder_angle, elbow_angle):
         """
-        Calculate the end-effector position given the joint angles.
-        
+        Calculate the end-effector position based on joint angles.
+
         Args:
-            base_angle: Base rotation angle in degrees
-            shoulder_angle: Shoulder angle in degrees
-            elbow_angle: Elbow angle in degrees (interior angle between links)
-            
+            base_angle: Angle of the base joint in degrees
+            shoulder_angle: Angle of the shoulder joint in degrees
+            elbow_angle: Angle of the elbow joint in degrees
+
         Returns:
-            tuple: (x, y, z) coordinates in cm
+            tuple: (x, y, z) position coordinates in cm
         """
         # Convert angles to radians
         base_rad = math.radians(base_angle)
         shoulder_rad = math.radians(shoulder_angle)
-        elbow_rad = math.radians(elbow_angle)  # FIXED: Use elbow angle directly
+        elbow_rad = math.radians(elbow_angle)
         
-        # Calculate the position of the elbow joint
-        elbow_x = self.link1_length * math.cos(shoulder_rad) * math.cos(base_rad)
-        elbow_y = self.link1_length * math.cos(shoulder_rad) * math.sin(base_rad)
-        elbow_z = self.base_height + self.link1_length * math.sin(shoulder_rad)
+        # Calculate the position in the arm plane (ignoring base rotation for now)
+        # First, calculate position at the end of link1
+        link1_x = self.link1_length * math.cos(shoulder_rad)
+        link1_y = self.link1_length * math.sin(shoulder_rad)
         
-        # FIXED: Calculate the absolute angle of the second link
-        second_link_angle = shoulder_rad - (math.pi - elbow_rad)
+        # Calculate the absolute angle of link2 from horizontal
+        link2_angle = shoulder_rad - math.radians(180 - elbow_angle)
         
-        # Calculate the position of the end effector
-        x = elbow_x + self.link2_length * math.cos(second_link_angle) * math.cos(base_rad)
-        y = elbow_y + self.link2_length * math.cos(second_link_angle) * math.sin(base_rad)
-        z = elbow_z + self.link2_length * math.sin(second_link_angle)
+        # Calculate the end position of link2
+        link2_x = self.link2_length * math.cos(link2_angle)
+        link2_y = self.link2_length * math.sin(link2_angle)
         
-        return (x, y, z)
+        # Calculate arm endpoint in arm plane (before accounting for base rotation)
+        arm_plane_x = link1_x + link2_x
+        arm_plane_y = link1_y + link2_y
+        
+        # Account for linkage effect if present
+        if hasattr(self, 'linkage_length') and hasattr(self, 'linkage_angle_deg'):
+            linkage_angle_rad = math.radians(self.linkage_angle_deg)
+            linkage_contribution_x = self.linkage_length * math.cos(linkage_angle_rad + shoulder_rad)
+            linkage_contribution_y = self.linkage_length * math.sin(linkage_angle_rad + shoulder_rad)
+            arm_plane_x += linkage_contribution_x
+            arm_plane_y += linkage_contribution_y
+        
+        # Apply base rotation to get the final x, y coordinates
+        x_rotated = arm_plane_x * math.cos(base_rad)
+        y_rotated = arm_plane_x * math.sin(base_rad)
+        
+        # Apply base and gripper offsets
+        if hasattr(self, 'baseDistFromOrigin'):
+            x_rotated += self.baseDistFromOrigin * math.sin(base_rad)
+            y_rotated += -self.baseDistFromOrigin * math.cos(base_rad)
+        
+        if hasattr(self, 'gripperDistFromOrigin'):
+            x_rotated += -self.gripperDistFromOrigin * math.sin(base_rad)
+            y_rotated += self.gripperDistFromOrigin * math.cos(base_rad)
+        
+        # Calculate final z coordinate
+        z = self.base_height + arm_plane_y
+        
+        return (x_rotated, y_rotated, z)
 
     def move_joints(self, target_angles, simulate=False):
         """
@@ -702,7 +376,7 @@ class ChessRobot:
         Returns:
             None
         """
-        current_x, current_y, current_z = self.forward_kinematics(*self.current_angles)
+        current_x, current_y, current_z = self.forward_kinematics_improved(*self.current_angles)
         
         if avoid_collisions:
             # First move up to clearance height if needed
@@ -725,6 +399,10 @@ class ChessRobot:
         self.move_joints(self.home_position)
         self.actuate_gripper(False)  # Open gripper
 
+    def getSquarePositionAngles(self,pos):
+        x, y = self.algebraic_to_coordinate(pos)
+        return self.inverse_kinematics(x, y, self.board_height + self.z_clearance)
+
     def move_piece(self, from_pos, to_pos):
         """Helper function to move a piece and update visualization"""
         # Convert chess positions to coordinates
@@ -732,8 +410,8 @@ class ChessRobot:
         to_x, to_y = self.algebraic_to_coordinate(to_pos)
         
         # Calculate Z heights
-        piece_top_z = self.board_height + self.z_clearance + 10
-        hover_z = self.board_height + self.z_clearance + 10
+        piece_top_z = self.board_height + self.z_clearance_moving
+        hover_z = self.board_height + self.z_clearance_moving
         grip_z = self.board_height + self.z_clearance
         place_z = self.board_height + self.z_clearance
         
@@ -861,6 +539,8 @@ def run_chess_robot_demo():
     # print("\nSaving animation...")
     # if hasattr(robot, 'visualizer'):
     #     robot.visualizer.create_animation(filename="chess_robot_demo.gif", method="imageio", fps=10)
+
+    # robot.getSquarePositionAngles('e4')
 
     print("\nDemo completed!")
 
