@@ -7,12 +7,23 @@ import math
 from IPython.display import HTML
 import time
 import serial
+import json  # Add this import at the top of the file
 
 class ChessRobot:
-    def __init__(self, base_height=2.8448, link1_length=37.2872, link2_length=36.83, 
-                 gripper_height=14.732, chess_square_size=4.07, board_height=2.5273,
-                 board_origin_x=-19.1, board_origin_y=31.625, linkage_angle_deg=99.8,
-                 linkage_length=4.9784, baseDistFromOrigin=2.5, gripperDistFromOrigin=5.0, home_position=(90, 90, 20)):
+    def __init__(self, base_height=2.8448,
+                 link1_length=37.2872,
+                 link2_length=36.83, 
+                 gripper_height=14.732,
+                 chess_square_size=5.461, #4.07
+                 board_height=0.21463, #2.5273
+                 board_origin_x=-22.1488, #-19.1
+                 board_origin_y=23.495, #31.625
+                 linkage_angle_deg=99.8,
+                 linkage_length=4.9784,
+                 baseDistFromOrigin=1.453642,
+                 gripperDistFromOrigin=3.601466 + 0.70612,
+                 home_position=(90, 90, 60)):
+        
         """
         Initialize the chess robot with specified dimensions and parameters.
         
@@ -54,54 +65,147 @@ class ChessRobot:
         self.gripper_closed = False
         
         # Movement parameters
-        self.move_step_size = 2  # degrees per step
-        self.z_clearance = 5.0 + self.gripper_height  # cm above pieces for grabbing
+        self.move_step_size = 3  # degrees per step
+        self.z_clearance = 1.0 + self.gripper_height  # cm above pieces for grabbing
         self.z_clearance_moving = self.z_clearance + 10.0  # cm above pieces for moving
 
-        self.sendActualCommands = False
+        self.sendActualCommands = True
 
         if self.sendActualCommands:
             self.ser = self.setup_serial()
 
-        self.allowAngles = 0
+        self.allowAngles = False
         if not self.sendActualCommands:
             self.allowAngles = True
 
-    def setup_serial(self, port='COM8', baud_rate=9600):
+    def setup_serial(self, port='COM9', baud_rate=9600):
         """Set up serial connection to Arduino"""
         ser = serial.Serial(port, baud_rate, timeout=1)
         ser.setDTR(False)  # Prevents reset
         time.sleep(2)  # Allow connection to establish
         return ser
+    
+    def safe_serial_write(self, data_string):
+        """Safely write to the serial port, with auto-reconnect on failure."""
+        if not self.sendActualCommands:
+            print(f"Simulated serial write: {data_string.strip()}")
+            return
+
+        for attempt in range(2):  # Try at most twice
+            try:
+                if not self.ser or not self.ser.is_open:
+                    print("Serial port closed. Reconnecting...")
+                    self.ser = self.setup_serial()
+
+                self.ser.write(data_string.encode())
+                return  # Success, return early
+
+            except serial.SerialException as e:
+                print(f"[Attempt {attempt+1}] Serial write failed: {e}")
+                try:
+                    if self.ser:
+                        self.ser.close()
+                except:
+                    pass  # Ignore if already closed
+                self.ser = None  # Reset for retry
+
+        print("⚠️ Serial write ultimately failed. Giving up.")
+
+    def safe_serial_readline(self):
+        """Safely read a line from the serial port."""
+        if not self.sendActualCommands:
+            return None
+
+        try:
+            if self.ser and self.safe_serial_in_waiting() > 0:
+                return self.ser.readline().decode('utf-8').rstrip()
+        except serial.SerialException as e:
+            print(f"Serial read failed: {e}")
+            for attempt in range(2):  # Try at most twice
+                try:
+                    if not self.ser or not self.ser.is_open:
+                        print("Serial port closed. Reconnecting...")
+                        self.ser = self.setup_serial()
+
+                    self.ser.readline().decode('utf-8').rstrip()
+                    return  # Success, return early
+
+                except serial.SerialException as e:
+                    print(f"[Attempt {attempt+1}] Serial write failed: {e}")
+                    try:
+                        if self.ser:
+                            self.ser.close()
+                    except:
+                        pass  # Ignore if already closed
+                    self.ser = None  # Reset for retry
+        return None
+    
+    def safe_serial_in_waiting(self):
+        """Safely get in_waiting from serial without raising ClearCommError."""
+        
+        if not self.sendActualCommands or not self.ser:
+            return 0
+        try:
+            return self.ser.in_waiting
+        except serial.SerialException as e:
+            print(f"[in_waiting error] {e}")
+            
+            try:
+                self.ser.close()
+            except:
+                pass
+            self.ser = None
+            return 0
 
     def sendAngleArray(self, angles):
-        """
-        Send an array of 3 angles to Arduino
-        
-        Args:
-            ser: Serial connection object
-            angles: List of 3 angle values
-        """
-        # Read a line of data from the serial port
         while not self.allowAngles:
-            while self.ser.in_waiting > 0:
-                data = self.ser.readline().decode('utf-8').rstrip()
-
+            print(self.ser)
+            print(self.safe_serial_in_waiting())
+            while self.safe_serial_in_waiting() > 0:
+                data = self.safe_serial_readline()
                 if data == "Calibration complete":
                     self.allowAngles = 1
-            
-                # Print the received data
                 print(data)
 
-        # Format the three angles with comma separators
         data_string = f"{round(angles[0], 2), round(angles[1], 2), round(angles[2], 2), round(self.gripper_closed, 2)}\n"
         print(f"Printing from RPi: {data_string}\n")
 
-        time.sleep(0.5)
+        self.safe_serial_write(data_string)
+
+        doneWithMove = False
+        while not doneWithMove:
+            data = self.safe_serial_readline()
+            if data:
+                if data == "Done with move":
+                    doneWithMove = True
+                print(data)
         
-        # Send the data
-        if self.sendActualCommands:
-            self.ser.write(data_string.encode())
+        time.sleep(0.5)  # Allow time for the command to be processed
+
+            # if self.sendActualCommands:
+            #     self.ser.close()
+
+    def algebraic_to_angles(self, chess_position):
+        """
+        Convert chess algebraic notation (e.g., 'e4') to coordinates by looking up in positions.json.
+        
+        Args:
+            chess_position: Chess position in algebraic notation (e.g., 'e4')
+            
+        Returns:
+            tuple: angles
+        """
+        # Load the positions from the JSON file
+        positions_file = r"c:\Users\dafe2002\Mega\Megatronics\positions.json"
+        with open(positions_file, 'r') as file:
+            positions = json.load(file)
+        
+        # Check if the position exists in the JSON file
+        if chess_position not in positions:
+            raise ValueError(f"Position {chess_position} not found in positions.json")
+        
+        # Return the coordinates as a tuple
+        return tuple(positions[chess_position])
 
     def algebraic_to_coordinate(self, chess_position):
         """
@@ -178,8 +282,8 @@ class ChessRobot:
 
         # Check if the target is reachable
         max_reach = self.link1_length + self.link2_length
-        if reach > max_reach:
-            raise ValueError(f"Target position ({x}, {y}, {z}) is out of reach. Maximum reach is {max_reach} cm.")
+        #if reach > max_reach:
+        #    raise ValueError(f"Target position ({x}, {y}, {z}) is out of reach. Maximum reach is {max_reach} cm.")
 
         i = 0
         linkage_angle_rad = math.radians(self.linkage_angle_deg)
@@ -295,33 +399,34 @@ class ChessRobot:
         Returns:
             None
         """
-        # Calculate the number of steps for the largest angle change
-        angle_changes = [abs(target - current) for target, current in zip(target_angles, self.current_angles)]
-        max_change = max(angle_changes)
-        num_steps = max(1, int(max_change / self.move_step_size))
+        # # Calculate the number of steps for the largest angle change
+        # angle_changes = [abs(target - current) for target, current in zip(target_angles, self.current_angles)]
+        # max_change = max(angle_changes)
+        # num_steps = max(1, int(max_change / self.move_step_size))
         
-        # Generate intermediate angles for smooth movement
-        for step in range(1, num_steps + 1):
-            # Calculate interpolated angles for this step
-            intermediate_angles = [
-                current + (target - current) * step / num_steps
-                for current, target in zip(self.current_angles, target_angles)
-            ]
+        # # Generate intermediate angles for smooth movement
+        # for step in range(1, num_steps + 1):
+        #     # Calculate interpolated angles for this step
+        #     intermediate_angles = [
+        #         current + (target - current) * step / num_steps
+        #         for current, target in zip(self.current_angles, target_angles)
+        #     ]
             
-            if not simulate:
-                # Here you would send the actual commands to your robot hardware
-                # print(f"Moving to angles: Base={intermediate_angles[0]:.1f}°, "
-                      # f"Shoulder={intermediate_angles[1]:.1f}°, Elbow={intermediate_angles[2]:.1f}°")
-                self.send_to_motors(intermediate_angles)
+        #     if not simulate:
+        #         # Here you would send the actual commands to your robot hardware
+        #         # print(f"Moving to angles: Base={intermediate_angles[0]:.1f}°, "
+        #               # f"Shoulder={intermediate_angles[1]:.1f}°, Elbow={intermediate_angles[2]:.1f}°")
+        #         self.send_to_motors(intermediate_angles)
                 
-                time.sleep(0.05)  # Simulate movement time
+        #         time.sleep(0.05)  # Simulate movement time
             
-            # Append a frame to the visualization if visualizer is available
-            if hasattr(self, 'visualizer'):
-                self.visualizer.append_frame(intermediate_angles, self.gripper_closed)
+        #     # Append a frame to the visualization if visualizer is available
+        #     if hasattr(self, 'visualizer'):
+        #         self.visualizer.append_frame(intermediate_angles, self.gripper_closed)
 
-            # Update current angles
-            self.current_angles = intermediate_angles
+
+        # Update current angles
+        # self.current_angles = intermediate_angles
             
         # Ensure we arrive exactly at the target angles
         if not simulate:
@@ -364,6 +469,10 @@ class ChessRobot:
             # self.send_gripper_command(close)
             time.sleep(0.5)  # Allow time for gripper to actuate
             self.gripper_closed = close
+
+        # send command
+        self.send_to_motors(self.current_angles)
+
 
     def move_to_position(self, x, y, z, avoid_collisions=True):
         """
@@ -416,16 +525,17 @@ class ChessRobot:
         place_z = self.board_height + self.z_clearance
         
         # 1. Open gripper
-        self.actuate_gripper(False)
+        self.actuate_gripper(True)
         
         # 2. Move above the piece to pick
         self.move_to_position(from_x, from_y, hover_z)
         
         # 3. Lower to grip the piece
-        self.move_to_position(from_x, from_y, grip_z, avoid_collisions=False)
+        # self.move_to_position(from_x, from_y, grip_z, avoid_collisions=False)
+        self.move_joints(self.algebraic_to_angles(from_pos))
         
         # 4. Close gripper to grab the piece
-        self.actuate_gripper(True)
+        self.actuate_gripper(False)
         
         # Update visualization piece state if enabled
         if hasattr(self, 'visualizer'):
@@ -438,16 +548,19 @@ class ChessRobot:
         self.move_to_position(to_x, to_y, piece_top_z)
         
         # 7. Lower piece to the board
-        self.move_to_position(to_x, to_y, place_z, avoid_collisions=False)
+        # self.move_to_position(to_x, to_y, place_z, avoid_collisions=False)
+        self.move_joints(self.algebraic_to_angles(to_pos))
         
         # 8. Release the piece
-        self.actuate_gripper(False)
+        self.actuate_gripper(True)
         
         # 9. Move up away from the piece
         self.move_to_position(to_x, to_y, hover_z, avoid_collisions=False)
         
         # 10. Return to home position
         self.move_joints(self.home_position)
+
+        time.sleep(4)
 
     def capture_piece(self, pos, captured_storage=(35, 35)):
         """Helper function to capture a piece and update visualization"""
@@ -521,11 +634,11 @@ def run_chess_robot_demo():
     
     # 1. King's pawn opening (e2 to e4)
     # print("\nMoving pawn from e2 to e4")
-    robot.move_piece('e1', 'e8')
+    # robot.move_piece('f1', 'e7')
     
     # 2. Knight to f3
     # print("\nMoving knight from g1 to f3")
-    # robot.move_piece('g1', 'f3')
+    robot.move_piece('e4', 'g6')
     
     # 3. Queen's pawn opening (d2 to d4)
     # print("\nMoving pawn from d2 to d4")
@@ -540,9 +653,12 @@ def run_chess_robot_demo():
     # if hasattr(robot, 'visualizer'):
     #     robot.visualizer.create_animation(filename="chess_robot_demo.gif", method="imageio", fps=10)
 
-    # robot.getSquarePositionAngles('e4')
+    # print(robot.algebraic_to_angles('g6'))
 
     print("\nDemo completed!")
+    if robot.sendActualCommands:
+        if robot.ser.is_open:
+            robot.ser.close()
 
 if __name__ == "__main__":
     run_chess_robot_demo()
