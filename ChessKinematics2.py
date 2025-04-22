@@ -69,7 +69,7 @@ class ChessRobot:
         self.z_clearance = 1.0 + self.gripper_height  # cm above pieces for grabbing
         self.z_clearance_moving = self.z_clearance + 10.0  # cm above pieces for moving
 
-        self.sendActualCommands = True
+        self.sendActualCommands = True 
 
         if self.sendActualCommands:
             self.ser = self.setup_serial()
@@ -78,7 +78,7 @@ class ChessRobot:
         if not self.sendActualCommands:
             self.allowAngles = True
 
-    def setup_serial(self, port='COM9', baud_rate=9600):
+    def setup_serial(self, port='COM7', baud_rate=9600):
         """Set up serial connection to Arduino"""
         ser = serial.Serial(port, baud_rate, timeout=1)
         ser.setDTR(False)  # Prevents reset
@@ -172,7 +172,11 @@ class ChessRobot:
 
         self.safe_serial_write(data_string)
 
-        doneWithMove = False
+        if self.sendActualCommands:
+            doneWithMove = False
+        else:
+            doneWithMove = True
+
         while not doneWithMove:
             data = self.safe_serial_readline()
             if data:
