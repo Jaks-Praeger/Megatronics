@@ -23,7 +23,7 @@ class ChessRobot:
                  linkage_length=4.9784,
                  baseDistFromOrigin=1.453642,
                  gripperDistFromOrigin=3.601466 + 0.70612,
-                 home_position=(90, 90, 60)):
+                 home_position=(90, 130, 50)):
         
         """
         Initialize the chess robot with specified dimensions and parameters.
@@ -70,7 +70,7 @@ class ChessRobot:
         self.z_clearance = 1.0 + self.gripper_height  # cm above pieces for grabbing
         self.z_clearance_moving = self.z_clearance + 10.0  # cm above pieces for moving
 
-        self.sendActualCommands = True
+        self.sendActualCommands = False
 
         if self.sendActualCommands:
             self.ser = self.setup_serial()

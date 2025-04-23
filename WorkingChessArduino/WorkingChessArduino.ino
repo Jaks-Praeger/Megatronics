@@ -12,16 +12,17 @@ float angles[4];  // Array to store the angles
 float pos = 0;
 
 // PIN DEFINITIONS
-const int elbowServoPin = 12;
-const int wristServoPin = 6; // WHITE
-const int gripperServoPin = 7; // YELLOW
-const int humerusLS_pin = 21; //Limit switch on the back of the humerus
-const int base_cal_pin = 20;
+const uint8_t elbowServoPin = 12;
+const uint8_t wristServoPin = 6; // WHITE
+const uint8_t gripperServoPin = 7; // YELLOW
+const uint8_t humerusLS_pin = 21; //Limit switch on the back of the humerus
+const uint8_t base_cal_pin = 20;
+const uint8_t allOtherSwitches = 19;
+
 
 const int shoulderStepsPerRev = 200 * 20 * 4;  // change this to fit the number of steps per revolution (steps * gear ratio * 4)
 const int baseStepsPerRev = 3200 * 4;  // change this to fit the number of steps per revolution (steps * gear ratio * 4)
 
-const int allOtherSwitches = 19;
 
 
 float elbowSmoothingFactor = 0.15;   // Adjust as needed
@@ -39,16 +40,17 @@ void setup() {
   //Serial.setTimeout(200);
 
   angles[0] = 90;
-  angles[1] = 90;
-  angles[2] = 60;
+  angles[1] = 130;
+  angles[2] = 50;
   angles[3] = 1; //Starts open
 
   // Initialize servo pin and stepper speeds and accelerations 
+  pinMode(humerusLS_pin, INPUT_PULLUP);
   elbowServo.attach(elbowServoPin);  // attaches the servo on pin 9 to the Servo object
   elbowServo.write(130);
   wristServo.attach(wristServoPin);
   gripperServo.attach(gripperServoPin);
-  baseStepper.setMaxSpeed(1200);  // Steps per second (max value set by arduino clock speed)
+  baseStepper.setMaxSpeed(800);  // Steps per second (max value set by arduino clock speed)
   baseStepper.setAcceleration(600.0);  // Steps per secon^2 (6000 default)
   shoulderStepper.setMaxSpeed(1200);  // Steps per second (max value set by arduino clock speed) 5000
   shoulderStepper.setAcceleration(400.0);  // Steps per secon^2 (2000 default)
@@ -61,10 +63,24 @@ void setup() {
   Serial.println(previousElbowTarget);
   // elbowServo.write(previousElbowTarget);
 
-  // Run calibration before limit switch becomes an interupt
-  pinMode(humerusLS_pin, INPUT_PULLUP);
-  calibrateShoulder();
+  //Run calibration before limit switch becomes an interupt
+  Serial.println("Enter 0 to continue:");
+  while(1) {
+    if (Serial.available() > 0) {
+      char receivedChar = Serial.read();  // Read the incoming character
+      
+      // If the character received is '0', exit the loop and continue
+      if (receivedChar == '0') {
+        Serial.println("Received 0, continuing...");
+        break;  
+      }
+    }
+  }
   calibrateBase();
+  calibrateShoulder();
+
+  baseStepper.runToNewPosition(-45.0 /360*baseStepsPerRev);  // Move to the zero position
+    while(baseStepper.distanceToGo() != 0){}  // Wait for the stepper to finish moving
 
   // Set the hummerous outside limit switch to an interupt pin so it will have imediate control
   delay(2000);
@@ -72,6 +88,7 @@ void setup() {
 //  attachInterrupt(digitalPinToInterrupt(base_cal_pin), limit_ISR, LOW);
 //  attachInterrupt(digitalPinToInterrupt(allOtherSwitches), limit_ISR, LOW);
 
+  setMotors(angles);
   Serial.println("Arduino ready");
 
   Serial.println("Calibration complete");
@@ -100,66 +117,42 @@ void loop() {
       i++;
       token = strtok(NULL, ",");
     }
+
+    if(angles[0] < 45 || angles[0] > 250){
+    } else if(angles[1] < 35 || angles[1] > 150) {
+    } else {
+      setMotors(angles); // Set motors to the given angles
+    }
     
-    // Set motors to the given angles
-    setMotors(angles);
+    
   }
    
 }
 
-//void interpolatedMove(float targetAngles[4]) {
-//  // 1. Calculate max angle change
-//  float maxChange = 0;
-//  for (int i = 0; i < 3; i++) { // Only joints 0-2 (gripper is binary)
-//    float diff = abs(targetAngles[i] - currentAngles[i]);
-//    if (diff > maxChange) {
-//      maxChange = diff;
-//    }
-//  }
-//
-//  // 2. Determine number of interpolation steps
-//  int numSteps = max(1, int(maxChange / move_step_size));
-//
-//  // 3. Interpolate and move
-//  for (int step = 1; step <= numSteps; step++) {
-//    float stepAngles[4];
-//    for (int i = 0; i < 3; i++) {
-//      stepAngles[i] = currentAngles[i] + (targetAngles[i] - currentAngles[i]) * ((float)step / numSteps);
-//    }
-//    stepAngles[3] = targetAngles[3]; // Gripper is not interpolated
-//
-//    setMotors(stepAngles);
-//  }
-//
-//  // 4. Update current angles
-//  for (int i = 0; i < 4; i++) {
-//    currentAngles[i] = targetAngles[i];
-//  }
-//  Serial.println("Done with move");
-//}
 
 
 void printMotorAngles(float angles[4]) {
 
   Serial.print("Motor angle = ");
-  Serial.print(angles[0]);
+  Serial.print(angles[0]);  // base
   Serial.print(", ");
-  Serial.print(angles[1]);
+  Serial.print(angles[1]); // shoulder
   Serial.print(", ");
-  Serial.print(angles[2]);
+  Serial.print(angles[2]); // elbow
   Serial.print(", ");
-  Serial.println(angles[3]);
+  Serial.println(angles[3]);  // gripper
 
 }
 
  void setMotors(float angles[4]) {
 
+    // If the gripper needs to open, do that first
     if(angles[3] == 1){
       Serial.println("OPENING GRIPPER");
       openGripper();
     }
     
-     printMotorAngles(angles);
+    printMotorAngles(angles);   // Print the angles the motor is going to
     Serial.print("Writing to Elbow: ");
     Serial.println(angles[2]);
     // === ELBOW SERVO SMOOTH SETUP ===
@@ -172,18 +165,21 @@ void printMotorAngles(float angles[4]) {
     
     unsigned long lastUpdateTime = millis();
     const int elbowStepDelay = 10; // ms between servo steps
-    
+
+    Serial.println();
     Serial.println("//////////////////////////////");
     Serial.print(baseStepper.currentPosition() * 360/baseStepsPerRev);
     Serial.print(", ");
     Serial.println(shoulderStepper.currentPosition() * 360/shoulderStepsPerRev);
     Serial.println("/////////////////////////////");
     
+    // Map the base angles
     Serial.print("Writing to Base: ");
     Serial.println(angles[0]);
-    pos = map(angles[0],90,270,0,-180) - 2;
+    pos = map(angles[0],90,270,-45,-225) - 2;
     baseStepper.moveTo(pos * baseStepsPerRev/360);
     
+    //Map the shoulder
     Serial.print("Writing to Shoulder: ");
     Serial.println(angles[1]);
     pos = map(angles[1],0,180,-180,0) + 5;
@@ -201,8 +197,8 @@ void printMotorAngles(float angles[4]) {
     //wristServo.write(wristAngle);
     
     // Calculate maximum number of steps needed by any motor
-    long shoulderStepsToGo = shoulderStepper.distanceToGo();
-    long baseStepsToGo = baseStepper.distanceToGo();
+    long shoulderStepsToGo = shoulderStepper.distanceToGo() / shoulderStepper.speed();
+    long baseStepsToGo = baseStepper.distanceToGo() / baseStepper.speed();
     long maxSteps = max(abs(baseStepsToGo), max(abs(shoulderStepsToGo), elbowStepsToGo));
     
     if (maxSteps == 0) {
@@ -277,6 +273,7 @@ void printMotorAngles(float angles[4]) {
 
     wristServo.write(wristAngle);
 
+    // Close the gripper if nneded
     if (angles[3] == 0){
       Serial.println("CLOSING GRIPPER");
       closeGripper();
@@ -285,32 +282,25 @@ void printMotorAngles(float angles[4]) {
     Serial.println("Done with move");
 }
 
+
+
 void openGripper(){
   gripperServo.write(180);
 }
+
+
 
 void closeGripper(){
   gripperServo.write(0);
 }
 
+
+
 void calibrateShoulder() {
-
- Serial.println("Enter 0 to continue:");
-
-// while(1) {
-//  Serial.print("Arm cal pin: " + String(digitalRead(humerusLS_pin)));
-//  Serial.print("Base cal pin: ");
-//  Serial.println(digitalRead(base_cal_pin));
-//   if (Serial.available() > 0) {
-//     char receivedChar = Serial.read();  // Read the incoming character
-//     
-//     // If the character received is '0', exit the loop and continue
-//     if (receivedChar == '0') {
-//       Serial.println("Received 0, continuing...");
-//       break;  
-//     }
-//   }
-// }
+ 
+  // Serial.print("Arm cal pin: " + String(digitalRead(humerusLS_pin)));
+  // Serial.print("Base cal pin: ");
+  // Serial.println(digitalRead(base_cal_pin));
 
   elbowServo.write(90);
 
@@ -354,31 +344,37 @@ void calibrateShoulder() {
     }
   }
 
-
 }
+
+
 
 void calibrateBase() {
   Serial.println("Calibrating base...");
-//  baseStepper.setSpeed(150);
-//  while(1){
-//    baseStepper.runSpeed();
-//    if (digitalRead(base_cal_pin) == 0) {
-//      // if limit switch is triggered, stop
-//      baseStepper.stop();
-//      Serial.println("Stopping base calibration");
+  baseStepper.setSpeed(300);
+
+  while(1){
+    baseStepper.runSpeed();
+
+    if (digitalRead(base_cal_pin) == 0) {
+      // if limit switch is triggered, stop
+      baseStepper.stop();
+      Serial.println("Stopping base calibration");
+
       baseStepper.setCurrentPosition(0);  // Set the current position as zero
       Serial.print("Base calibration complete at position: ");
       Serial.println(baseStepper.currentPosition() * 360/baseStepsPerRev);
-//      baseStepper.setSpeed(250);
-//      baseStepper.runToNewPosition(-45 /360*baseStepsPerRev);  // Move to the zero position
-//      while(baseStepper.distanceToGo() != 0){}  // Wait for the stepper to finish moving
-//      delay(4000);
-//      Serial.println("Exiting base calibration loop");
-//      return;
-//    }
-//  }
+
+      // resents the base to its max speed
+      baseStepper.setSpeed(baseStepper.maxSpeed());
+      
+      Serial.println("Exiting base calibration loop");
+      return;
+   }
+ }
   setMotors(angles);
 }
+
+
 
 float calculateWristAngle(float shoulderAngle, float elbowAngle) {
   // Ensure the wrist remains vertical by compensating for the shoulder and elbow angles
@@ -396,6 +392,7 @@ float calculateWristAngle(float shoulderAngle, float elbowAngle) {
 
   return wristAngle;
 }
+
 
 void limit_ISR() {
   Serial.println("MADE IT TO ISR");
