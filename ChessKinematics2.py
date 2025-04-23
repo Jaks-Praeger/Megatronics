@@ -8,6 +8,7 @@ from IPython.display import HTML
 import time
 import serial
 import json  # Add this import at the top of the file
+import re  # Add this import for regex matching
 
 class ChessRobot:
     def __init__(self, base_height=2.8448,
@@ -69,7 +70,7 @@ class ChessRobot:
         self.z_clearance = 1.0 + self.gripper_height  # cm above pieces for grabbing
         self.z_clearance_moving = self.z_clearance + 10.0  # cm above pieces for moving
 
-        self.sendActualCommands = True 
+        self.sendActualCommands = True
 
         if self.sendActualCommands:
             self.ser = self.setup_serial()
@@ -88,7 +89,7 @@ class ChessRobot:
     def safe_serial_write(self, data_string):
         """Safely write to the serial port, with auto-reconnect on failure."""
         if not self.sendActualCommands:
-            print(f"Simulated serial write: {data_string.strip()}")
+            # print(f"Simulated serial write: {data_string.strip()}")
             return
 
         for attempt in range(2):  # Try at most twice
@@ -168,7 +169,7 @@ class ChessRobot:
                 print(data)
 
         data_string = f"{round(angles[0], 2), round(angles[1], 2), round(angles[2], 2), round(self.gripper_closed, 2)}\n"
-        print(f"Printing from RPi: {data_string}\n")
+        print(f"Printing from RPi: {data_string}")
 
         self.safe_serial_write(data_string)
 
@@ -254,9 +255,9 @@ class ChessRobot:
         iterations = 5
         actual_x = x
         actual_y = y
-        print(f"Initial target position: {x}, {y}, {z}")
+        # print(f"Initial target position: {x}, {y}, {z}")
         base_angle = math.degrees(math.atan2(y, x))
-        print(f"Starting base angle: {base_angle}")
+        # print(f"Starting base angle: {base_angle}")
 
         for i in range(iterations):
             # Calculate the base rotation angle
@@ -276,8 +277,8 @@ class ChessRobot:
             x = actual_x - total_x_shift
             y = actual_y - total_y_shift
 
-        print(f"Adjusted target position: {x}, {y}, {z}")
-        print(f"Base angle after shifts: {base_angle}")
+        # print(f"Adjusted target position: {x}, {y}, {z}")
+        # print(f"Base angle after shifts: {base_angle}")
 
         # Now that we have x and y, we can calculate the shoulder and elbow angles
         r_xy = math.sqrt(x**2 + y**2)
@@ -297,7 +298,7 @@ class ChessRobot:
         alpha = math.degrees(math.atan2(height_from_shoulder, r_xy))
         beta = math.degrees(math.acos((self.link1_length**2 + reach**2 - self.link2_length**2) / (2 * self.link1_length * reach)))
         pre_shoulder_angle = alpha + beta
-        print(f"Pre-shoulder angle: {pre_shoulder_angle}")
+        # print(f"Pre-shoulder angle: {pre_shoulder_angle}")
 
 
         for i in range(iterations):
@@ -321,7 +322,7 @@ class ChessRobot:
         alpha = math.degrees(math.atan2(height_from_shoulder, r_xy))
         beta = math.degrees(math.acos((self.link1_length**2 + reach**2 - self.link2_length**2) / (2 * self.link1_length * reach)))
         shoulder_angle = alpha + beta
-        print(f"Actual shoulder angle: {shoulder_angle}")
+        # print(f"Actual shoulder angle: {shoulder_angle}")
 
         # Use the law of cosines to calculate the elbow angle
         cos_elbow = (self.link1_length**2 + self.link2_length**2 - reach**2) / (2 * self.link1_length * self.link2_length)
@@ -516,17 +517,61 @@ class ChessRobot:
         x, y = self.algebraic_to_coordinate(pos)
         return self.inverse_kinematics(x, y, self.board_height + self.z_clearance)
 
-    def move_piece(self, from_pos, to_pos):
+    def move_piece(self, from_pos, to_pos, use_calibrated_coords=True):
         """Helper function to move a piece and update visualization"""
         # Convert chess positions to coordinates
-        from_x, from_y = self.algebraic_to_coordinate(from_pos)
-        to_x, to_y = self.algebraic_to_coordinate(to_pos)
-        
-        # Calculate Z heights
+        if not use_calibrated_coords:
+            from_x, from_y = self.algebraic_to_coordinate(from_pos)
+            to_x, to_y = self.algebraic_to_coordinate(to_pos)
+            grip_z = self.board_height + self.z_clearance
+            place_z = self.board_height + self.z_clearance
+        else:
+            # Try to load calibrated coordinates from JSON file
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            coords_file = os.path.join(current_dir, "chessCoords.json")
+            
+            try:
+                with open(coords_file, 'r') as file:
+                    coords_dict = json.load(file)
+                    
+                # Check if both positions have calibrated coordinates
+                if from_pos in coords_dict and to_pos in coords_dict:
+                    from_x, from_y, grip_z = coords_dict[from_pos]
+                    to_x, to_y, place_z = coords_dict[to_pos]
+                    print(f"Using calibrated coordinates for {from_pos} and {to_pos}")
+                else:
+                    # Fall back to calculated coordinates if calibrated ones aren't available
+                    missing_pos = []
+                    if from_pos not in coords_dict:
+                        missing_pos.append(from_pos)
+                    if to_pos not in coords_dict:
+                        missing_pos.append(to_pos)
+                    print(f"Calibrated coordinates not found for {', '.join(missing_pos)}. Using calculated values.")
+                    
+                    # Get calculated coordinates for positions without calibration
+                    if from_pos in coords_dict:
+                        from_x, from_y, grip_z = coords_dict[from_pos]
+                    else:
+                        from_x, from_y = self.algebraic_to_coordinate(from_pos)
+                        grip_z = self.board_height + self.z_clearance
+                        
+                    if to_pos in coords_dict:
+                        to_x, to_y, place_z = coords_dict[to_pos]
+                    else:
+                        to_x, to_y = self.algebraic_to_coordinate(to_pos)
+                        place_z = self.board_height + self.z_clearance
+                        
+            except (FileNotFoundError, json.JSONDecodeError) as e:
+                print(f"Error loading calibrated coordinates: {e}")
+                print("Using calculated coordinates instead.")
+                from_x, from_y = self.algebraic_to_coordinate(from_pos)
+                to_x, to_y = self.algebraic_to_coordinate(to_pos)
+                grip_z = self.board_height + self.z_clearance
+                place_z = self.board_height + self.z_clearance
+                
+        # Calculate Z heights for movements
         piece_top_z = self.board_height + self.z_clearance_moving
         hover_z = self.board_height + self.z_clearance_moving
-        grip_z = self.board_height + self.z_clearance
-        place_z = self.board_height + self.z_clearance
         
         # 1. Open gripper
         self.actuate_gripper(True)
@@ -535,15 +580,10 @@ class ChessRobot:
         self.move_to_position(from_x, from_y, hover_z)
         
         # 3. Lower to grip the piece
-        # self.move_to_position(from_x, from_y, grip_z, avoid_collisions=False)
-        self.move_joints(self.algebraic_to_angles(from_pos))
+        self.move_to_position(from_x, from_y, grip_z, avoid_collisions=False)
         
         # 4. Close gripper to grab the piece
         self.actuate_gripper(False)
-        
-        # Update visualization piece state if enabled
-        if hasattr(self, 'visualizer'):
-            self.visualizer.update_piece_position(from_pos, to_pos)
         
         # 5. Lift the piece up
         self.move_to_position(from_x, from_y, piece_top_z, avoid_collisions=False)
@@ -552,8 +592,7 @@ class ChessRobot:
         self.move_to_position(to_x, to_y, piece_top_z)
         
         # 7. Lower piece to the board
-        # self.move_to_position(to_x, to_y, place_z, avoid_collisions=False)
-        self.move_joints(self.algebraic_to_angles(to_pos))
+        self.move_to_position(to_x, to_y, place_z, avoid_collisions=False)
         
         # 8. Release the piece
         self.actuate_gripper(True)
@@ -596,37 +635,177 @@ class ChessRobot:
         # 7. Lift up from storage area
         self.move_to_position(store_x, store_y, self.board_height + self.chess_square_size * 0.7, avoid_collisions=False)
 
-    def calibrate(self):
+    def calibrateCoordinates(self):
         """
-        Perform a calibration sequence for the robot.
-        This would be expanded with actual calibration logic for a real robot.
+        Interactive calibration function to fine-tune the position of each chess square.
+        Allows manual adjustment of x, y, z coordinates for each position.
+        Supports dynamic step sizes (e.g., "x+5" for 5cm adjustment).
+        Saves coordinates to chessCoords.json.
         """
-        print("Starting calibration sequence...")
         
-        # Move to home position
-        self.return_to_home()
+        # Define all chess positions
+        files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
+        ranks = ['1', '2', '3', '4', '5', '6', '7', '8']
+        positions = [f+r for f in files for r in ranks]
         
-        # Open and close gripper
-        self.actuate_gripper(False)
-        time.sleep(1)
-        self.actuate_gripper(True)
-        time.sleep(1)
-        self.actuate_gripper(False)
+        # Initialize coordinates dictionary
+        # Get the directory of the current Python file
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        # Construct the path to the JSON file in the same directory
+        coords_file = os.path.join(current_dir, "chessCoords.json")
         
-        # Move to each corner of the board to verify calibration
-        corners = ['a1', 'a8', 'h8', 'h1']
-        safe_z = self.board_height + self.z_clearance
+        # Load existing coordinates if file exists
+        if os.path.exists(coords_file):
+            try:
+                with open(coords_file, 'r') as file:
+                    coords_dict = json.load(file)
+                print(f"Loaded existing coordinates from {coords_file}")
+            except:
+                coords_dict = {}
+                print(f"Could not load {coords_file}, starting fresh")
+        else:
+            coords_dict = {}
+            print(f"Creating new coordinates file at {coords_file}")
         
-        for corner in corners:
-            print(f"Moving to corner {corner}")
-            x, y = self.algebraic_to_coordinate(corner)
-            self.move_to_position(x, y, safe_z)
-            time.sleep(1)
+        print("\n===== CHESS BOARD CALIBRATION =====")
+        print("For each position, the arm will move to the current saved/calculated position.")
+        print("You can then adjust x, y, z coordinates until the position is correct.")
+        print("Commands:")
+        print("  x+/x- [value]: Adjust x coordinate (e.g., 'x+0.5' or 'x-2')")
+        print("  y+/y- [value]: Adjust y coordinate (e.g., 'y+1' or 'y-0.2')")
+        print("  z+/z- [value]: Adjust z coordinate (e.g., 'z+0.1' or 'z-3')")
+        print("  done: Save position and move to next square")
+        print("  skip: Skip to next position without saving")
+        print("  quit: Save and exit calibration")
+        print("==============================\n")
         
-        # Return to home position
-        self.return_to_home()
+        # Regex pattern to match adjustment commands like "x+0.5" or "z-2"
+        adjustment_pattern = re.compile(r'^([xyz])([+-])(\d*\.?\d*)$')
         
-        print("Calibration complete")
+        try:
+            for position in positions:
+                # Skip positions that are already calibrated if user wants
+                if position in coords_dict:
+                    choice = input(f"Position {position} already calibrated. Recalibrate? (y/n): ")
+                    if choice.lower() != 'y':
+                        continue
+                
+                print(f"\nMoving to chess position: {position}")
+                
+                # Get initial coordinates from algebraic_to_coordinate
+                initial_x, initial_y = self.algebraic_to_coordinate(position)
+                initial_z = self.board_height + self.z_clearance
+                
+                # Use existing calibrated coordinates if available
+                if position in coords_dict:
+                    x, y, z = coords_dict[position]
+                    print(f"Using existing calibrated coordinates: x={x}, y={y}, z={z}")
+                else:
+                    x, y, z = initial_x, initial_y, initial_z
+                    print(f"Starting with calculated coordinates: x={x}, y={y}, z={z}")
+                
+                # Move to current position
+                try:
+                    self.move_to_position(x, y, z)
+                except ValueError as e:
+                    print(f"Error moving to position: {e}")
+                    print("Using default position instead")
+                    self.move_joints(self.home_position)
+                    x, y, z = initial_x, initial_y, initial_z
+                    self.move_to_position(x, y, z)
+                
+                # Default adjustment step in cm (used when no value is specified)
+                default_step = 0.5
+                
+                # Adjustment loop
+                while True:
+                    command = input(f"Position {position} (x={x:.2f}, y={y:.2f}, z={z:.2f}) - Enter command: ")
+                    
+                    if command == "done":
+                        coords_dict[position] = [x, y, z]
+                        print(f"Saved position {position}: {[x, y, z]}")
+                        break
+                        
+                    elif command == "skip":
+                        print(f"Skipping position {position}")
+                        break
+                        
+                    elif command == "quit":
+                        print("Saving coordinates and exiting calibration...")
+                        with open(coords_file, 'w') as file:
+                            json.dump(coords_dict, file, indent=2)
+                        print(f"Coordinates saved to {coords_file}")
+                        self.return_to_home()
+                        return
+                    
+                    # Parse adjustment commands (e.g., "x+0.5", "y-2", "z+")
+                    match = adjustment_pattern.match(command)
+                    if match:
+                        axis = match.group(1)  # x, y, or z
+                        direction = match.group(2)  # + or -
+                        
+                        # If no value specified, use default step
+                        value_str = match.group(3)
+                        step = float(value_str) if value_str else default_step
+                        
+                        # Apply the adjustment
+                        if axis == 'x':
+                            x += step if direction == '+' else -step
+                        elif axis == 'y':
+                            y += step if direction == '+' else -step
+                        elif axis == 'z':
+                            z += step if direction == '+' else -step
+                        
+                        # Move to the new position
+                        print(f"Adjusting {axis} by {direction}{step}")
+                        self.move_to_position(x, y, z, avoid_collisions=False)
+                    
+                    # Handle traditional x+, y-, etc. commands for backward compatibility
+                    elif command in ["x+", "x-", "y+", "y-", "z+", "z-"]:
+                        axis = command[0]
+                        direction = command[1]
+                        
+                        if axis == 'x':
+                            x += default_step if direction == '+' else -default_step
+                        elif axis == 'y':
+                            y += default_step if direction == '+' else -default_step
+                        elif axis == 'z':
+                            z += default_step if direction == '+' else -default_step
+                        
+                        print(f"Adjusting {axis} by {direction}{default_step}")
+                        self.move_to_position(x, y, z, avoid_collisions=False)
+                        
+                    elif command.startswith("step"):
+                        try:
+                            default_step = float(command.split()[1])
+                            print(f"Default adjustment step changed to {default_step} cm")
+                        except:
+                            print(f"Invalid step value. Using {default_step} cm")
+                        
+                    else:
+                        print("Unknown command. Available commands:")
+                        print("  x+/x- [value]: Adjust x coordinate (e.g., 'x+0.5' or 'x-2')")
+                        print("  y+/y- [value]: Adjust y coordinate (e.g., 'y+1' or 'y-0.2')")
+                        print("  z+/z- [value]: Adjust z coordinate (e.g., 'z+0.1' or 'z-3')")
+                        print(f"  step <value>: Change default adjustment step (current: {default_step})")
+                        print("  done: Save position and move to next square")
+                        print("  skip: Skip to next position without saving")
+                        print("  quit: Save and exit calibration")
+            
+            # Save final coordinates
+            with open(coords_file, 'w') as file:
+                json.dump(coords_dict, file, indent=2)
+            print(f"Calibration complete! Coordinates saved to {coords_file}")
+            self.return_to_home()
+            
+        except KeyboardInterrupt:
+            print("\nCalibration interrupted!")
+            choice = input("Save current progress? (y/n): ")
+            if choice.lower() == 'y':
+                with open(coords_file, 'w') as file:
+                    json.dump(coords_dict, file, indent=2)
+                print(f"Coordinates saved to {coords_file}")
+            self.return_to_home()
 
 def run_chess_robot_demo():
     # Create robot with visualization-friendly parameters
@@ -642,7 +821,8 @@ def run_chess_robot_demo():
     
     # 2. Knight to f3
     # print("\nMoving knight from g1 to f3")
-    robot.move_piece('e4', 'g6')
+    # robot.move_piece('a1', 'a2')
+    robot.calibrateCoordinates()
     
     # 3. Queen's pawn opening (d2 to d4)
     # print("\nMoving pawn from d2 to d4")
