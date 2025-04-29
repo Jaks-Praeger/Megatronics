@@ -14,11 +14,11 @@ class ChessRobot:
     def __init__(self, base_height=2.8448,
                  link1_length=37.2872,
                  link2_length=36.83, 
-                 gripper_height=14.732,
-                 chess_square_size=5.461, #4.07
-                 board_height=0.21463, #2.5273
-                 board_origin_x=-22.1488, #-19.1
-                 board_origin_y=23.495, #31.625
+                 gripper_height=16.51,
+                 chess_square_size=4.07, #4.07
+                 board_height=2.5273, #2.5273
+                 board_origin_x=-19.1, #-19.1
+                 board_origin_y=26.035, #31.625
                  linkage_angle_deg=99.8,
                  linkage_length=4.9784,
                  baseDistFromOrigin=1.453642,
@@ -67,10 +67,10 @@ class ChessRobot:
         
         # Movement parameters
         self.move_step_size = 3  # degrees per step
-        self.z_clearance = 1.0 + self.gripper_height  # cm above pieces for grabbing
+        self.z_clearance = 8.0 + self.gripper_height  # cm above pieces for grabbing
         self.z_clearance_moving = self.z_clearance + 10.0  # cm above pieces for moving
 
-        self.sendActualCommands = False
+        self.sendActualCommands = True
 
         if self.sendActualCommands:
             self.ser = self.setup_serial()
@@ -79,7 +79,7 @@ class ChessRobot:
         if not self.sendActualCommands:
             self.allowAngles = True
 
-    def setup_serial(self, port='COM7', baud_rate=9600):
+    def setup_serial(self, port='COM10', baud_rate=9600):
         """Set up serial connection to Arduino"""
         ser = serial.Serial(port, baud_rate, timeout=1)
         ser.setDTR(False)  # Prevents reset
@@ -160,8 +160,8 @@ class ChessRobot:
 
     def sendAngleArray(self, angles):
         while not self.allowAngles:
-            print(self.ser)
-            print(self.safe_serial_in_waiting())
+            # print(self.ser)
+            # print(self.safe_serial_in_waiting())
             while self.safe_serial_in_waiting() > 0:
                 data = self.safe_serial_readline()
                 if data == "Calibration complete":
@@ -183,7 +183,7 @@ class ChessRobot:
             if data:
                 if data == "Done with move":
                     doneWithMove = True
-                print(data)
+                # print(data)
         
         time.sleep(0.5)  # Allow time for the command to be processed
 
@@ -706,6 +706,7 @@ class ChessRobot:
                 
                 # Move to current position
                 try:
+                    print(f"\n z is : {z}")
                     self.move_to_position(x, y, z)
                 except ValueError as e:
                     print(f"Error moving to position: {e}")
@@ -817,12 +818,12 @@ def run_chess_robot_demo():
     
     # 1. King's pawn opening (e2 to e4)
     # print("\nMoving pawn from e2 to e4")
-    # robot.move_piece('f1', 'e7')
+    robot.move_piece('a1', 'a4')
     
     # 2. Knight to f3
     # print("\nMoving knight from g1 to f3")
     # robot.move_piece('a1', 'a2')
-    robot.calibrateCoordinates()
+    # robot.calibrateCoordinates()
     
     # 3. Queen's pawn opening (d2 to d4)
     # print("\nMoving pawn from d2 to d4")

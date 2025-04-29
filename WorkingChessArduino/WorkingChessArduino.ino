@@ -15,9 +15,9 @@ float pos = 0;
 const uint8_t elbowServoPin = 12;
 const uint8_t wristServoPin = 6; // WHITE
 const uint8_t gripperServoPin = 7; // YELLOW
-const uint8_t humerusLS_pin = 21; //Limit switch on the back of the humerus
+const uint8_t humerusLS_pin = 19; //Limit switch on the back of the humerus
 const uint8_t base_cal_pin = 20;
-const uint8_t allOtherSwitches = 19;
+const uint8_t allOtherSwitches = 21;
 
 
 const int shoulderStepsPerRev = 200 * 20 * 4;  // change this to fit the number of steps per revolution (steps * gear ratio * 4)
@@ -49,7 +49,9 @@ void setup() {
   elbowServo.attach(elbowServoPin);  // attaches the servo on pin 9 to the Servo object
   elbowServo.write(130);
   wristServo.attach(wristServoPin);
+  wristServo.write(45);
   gripperServo.attach(gripperServoPin);
+  openGripper();
   baseStepper.setMaxSpeed(800);  // Steps per second (max value set by arduino clock speed)
   baseStepper.setAcceleration(600.0);  // Steps per secon^2 (6000 default)
   shoulderStepper.setMaxSpeed(1200);  // Steps per second (max value set by arduino clock speed) 5000
@@ -64,18 +66,19 @@ void setup() {
   // elbowServo.write(previousElbowTarget);
 
   //Run calibration before limit switch becomes an interupt
-  Serial.println("Enter 0 to continue:");
-  while(1) {
-    if (Serial.available() > 0) {
-      char receivedChar = Serial.read();  // Read the incoming character
+  // Serial.println("Enter 0 to continue:");
+  // while(1) {
+  //   // Serial.println(digitalRead(humerusLS_pin));
+  //   if (Serial.available() > 0) {
+  //     char receivedChar = Serial.read();  // Read the incoming character
       
-      // If the character received is '0', exit the loop and continue
-      if (receivedChar == '0') {
-        Serial.println("Received 0, continuing...");
-        break;  
-      }
-    }
-  }
+  //     // If the character received is '0', exit the loop and continue
+  //     if (receivedChar == '0') {
+  //       Serial.println("Received 0, continuing...");
+  //       break;  
+  //     }
+  //   }
+  // }
   calibrateBase();
   calibrateShoulder();
 
@@ -187,7 +190,7 @@ void printMotorAngles(float angles[4]) {
     
     Serial.print("Writing to wrist: ");
     float wristAngle = calculateWristAngle(pos, angles[2]);
-    
+    float wristTarget = wristAngle;
     float wristCurrent = wristServo.read();
     float wristDirection = (wristAngle > wristCurrent) ? 1 : -1;
     float wristStepsToGo = abs(wristAngle - wristCurrent);
@@ -202,6 +205,10 @@ void printMotorAngles(float angles[4]) {
     long maxSteps = max(abs(baseStepsToGo), max(abs(shoulderStepsToGo), elbowStepsToGo));
     
     if (maxSteps == 0) {
+      if (angles[3] == 0){
+        Serial.println("CLOSING GRIPPER");
+        closeGripper();
+      }
       Serial.println("Done with move");
       return; // No movement needed
     }
@@ -213,50 +220,69 @@ void printMotorAngles(float angles[4]) {
     float wristRatio = (maxSteps > 0 && wristStepsToGo > 0) ? wristStepsToGo / (float)maxSteps : 0;
     
     // Counters for fractional steps
-    float baseCounter = 0, shoulderCounter = 0, elbowCounter = 0, wristCounter = 0;
     unsigned long lastElbowUpdateTime = millis();
   
     // Main movement loop
-    while (baseStepper.distanceToGo() != 0 || shoulderStepper.distanceToGo() != 0 || elbowCurrent != elbowTarget) {
+    while (baseStepper.distanceToGo() != 0 || shoulderStepper.distanceToGo() != 0 || elbowCurrent != elbowTarget || wristCurrent != wristTarget) {
       unsigned long currentTime = millis();
       
       // Base stepper movement
       if (baseStepper.distanceToGo() != 0) {
-        baseCounter += baseRatio;
-        if (baseCounter >= 1.0) {
-          baseCounter -= 1.0;
+        for(int i=0; i < baseRatio; i++) {
           baseStepper.run();
         }
       }
 
        // Elbow servo movement
       if (elbowCurrent != elbowTarget && currentTime - lastElbowUpdateTime >= elbowStepDelay) {
-        elbowCounter += elbowRatio;
-        if (elbowCounter >= 1.0) {
-          elbowCounter -= 1.0;
-          elbowCurrent += elbowDirection/2;
-          elbowServo.write(elbowCurrent);
+
+        if(abs(elbowCurrent - elbowTarget) < 3) {
+          elbowCurrent = elbowTarget;
         }
+        else {
+         elbowCurrent += elbowDirection/2 * elbowRatio;
+        }
+  
+        elbowServo.write(elbowCurrent);
+  
         lastElbowUpdateTime = currentTime;
       }
       
       // Shoulder stepper movement
       if (shoulderStepper.distanceToGo() != 0) {
-        shoulderCounter += shoulderRatio;
-        if (shoulderCounter >= 1.0) {
-          shoulderCounter -= 1.0;
+        for(int i=0; i < shoulderRatio; i++) {
           shoulderStepper.run();
         }
       }
       
       // Elbow servo movement
-      if (elbowCurrent != elbowTarget && currentTime - lastElbowUpdateTime >= elbowStepDelay) {
-        if (elbowCounter >= 1.0) {
-          elbowCurrent += elbowDirection/2;
-          elbowServo.write(elbowCurrent);
+       if (elbowCurrent != elbowTarget && currentTime - lastElbowUpdateTime >= elbowStepDelay) {
+
+        if(abs(elbowCurrent - elbowTarget) < 3) {
+          elbowCurrent = elbowTarget;
         }
+        else {
+         elbowCurrent += elbowDirection/2 * elbowRatio;
+        }
+  
+        elbowServo.write(elbowCurrent);
+  
+        lastElbowUpdateTime = currentTime;
       }
 
+      if (wristCurrent != wristTarget && currentTime - lastElbowUpdateTime >= wristStepDelay) {
+
+        if(abs(wristCurrent - wristTarget) < 3) {
+          wristCurrent = wristTarget;
+        }
+        else {
+         wristCurrent += wristDirection * wristRatio;
+        }
+  
+        wristServo.write(wristCurrent);
+  
+        lastElbowUpdateTime = currentTime;
+      }
      // Elbow servo movement
 //      if (wristCurrent != wristAngle && currentTime - lastElbowUpdateTime >= elbowStepDelay) {
 //        wristCounter += wristRatio;
@@ -291,7 +317,7 @@ void openGripper(){
 
 
 void closeGripper(){
-  gripperServo.write(0);
+  gripperServo.write(20);
 }
 
 
@@ -332,6 +358,8 @@ void calibrateShoulder() {
       while(shoulderStepper.isRunning()){}
 
       Serial.println(shoulderStepper.currentPosition() * 360/shoulderStepsPerRev);
+
+      shoulderStepper.setSpeed(shoulderStepper.maxSpeed());
       
       return;
     }
@@ -379,7 +407,7 @@ void calibrateBase() {
 float calculateWristAngle(float shoulderAngle, float elbowAngle) {
   // Ensure the wrist remains vertical by compensating for the shoulder and elbow angles
   float prewristAngle = 90 - (shoulderAngle - 180 + elbowAngle);
-  float wristAngle = map(prewristAngle, -180, 0, 175, -5);
+  float wristAngle = map(prewristAngle, -180, 0, 170, -10);
 
   // Normalize the wrist angle to stay within 0-180 degrees for the servo
   if (wristAngle < 0) {
