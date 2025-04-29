@@ -28,6 +28,9 @@ const int baseStepsPerRev = 3200 * 4;  // change this to fit the number of steps
 float elbowSmoothingFactor = 0.15;   // Adjust as needed
 float previousElbowTarget;
 
+bool wristOpen = 1;
+int wristCorrectionFactor = 0;
+
 //Initialize stepper and servo motors
 AccelStepper baseStepper(AccelStepper::FULL4WIRE, 2, 3, 4, 5); // Defaults to AccelStepper::FULL4WIRE (4 pins) on 2, 3, 4, 5
 AccelStepper shoulderStepper(AccelStepper::FULL4WIRE, 8, 9, 10, 11);
@@ -47,7 +50,7 @@ void setup() {
   // Initialize servo pin and stepper speeds and accelerations 
   pinMode(humerusLS_pin, INPUT_PULLUP);
   elbowServo.attach(elbowServoPin);  // attaches the servo on pin 9 to the Servo object
-  elbowServo.write(130);
+  elbowServo.write(110);
   wristServo.attach(wristServoPin);
   wristServo.write(45);
   gripperServo.attach(gripperServoPin);
@@ -149,6 +152,9 @@ void printMotorAngles(float angles[4]) {
 
  void setMotors(float angles[4]) {
 
+
+    wristOpen = angles[3];
+
     // If the gripper needs to open, do that first
     if(angles[3] == 1){
       Serial.println("OPENING GRIPPER");
@@ -209,6 +215,7 @@ void printMotorAngles(float angles[4]) {
         Serial.println("CLOSING GRIPPER");
         closeGripper();
       }
+      wristServo.write(wristAngle);
       Serial.println("Done with move");
       return; // No movement needed
     }
@@ -221,6 +228,7 @@ void printMotorAngles(float angles[4]) {
     
     // Counters for fractional steps
     unsigned long lastElbowUpdateTime = millis();
+    unsigned long lastWristUpdateTime = lastElbowUpdateTime;
   
     // Main movement loop
     while (baseStepper.distanceToGo() != 0 || shoulderStepper.distanceToGo() != 0 || elbowCurrent != elbowTarget || wristCurrent != wristTarget) {
@@ -240,7 +248,7 @@ void printMotorAngles(float angles[4]) {
           elbowCurrent = elbowTarget;
         }
         else {
-         elbowCurrent += elbowDirection/2 * elbowRatio;
+         elbowCurrent += elbowDirection/2 * elbowRatio / 1.8;
         }
   
         elbowServo.write(elbowCurrent);
@@ -255,22 +263,22 @@ void printMotorAngles(float angles[4]) {
         }
       }
       
-      // Elbow servo movement
-       if (elbowCurrent != elbowTarget && currentTime - lastElbowUpdateTime >= elbowStepDelay) {
+      // // Elbow servo movement
+      //  if (elbowCurrent != elbowTarget && currentTime - lastElbowUpdateTime >= elbowStepDelay) {
 
-        if(abs(elbowCurrent - elbowTarget) < 3) {
-          elbowCurrent = elbowTarget;
-        }
-        else {
-         elbowCurrent += elbowDirection/2 * elbowRatio;
-        }
+      //   if(abs(elbowCurrent - elbowTarget) < 3) {
+      //     elbowCurrent = elbowTarget;
+      //   }
+      //   else {
+      //    elbowCurrent += elbowDirection/2 * elbowRatio;
+      //   }
   
-        elbowServo.write(elbowCurrent);
+      //   elbowServo.write(elbowCurrent);
   
-        lastElbowUpdateTime = currentTime;
-      }
+      //   lastElbowUpdateTime = currentTime;
+      // }
 
-      if (wristCurrent != wristTarget && currentTime - lastElbowUpdateTime >= wristStepDelay) {
+      if (wristCurrent != wristTarget && currentTime - lastWristUpdateTime >= wristStepDelay) {
 
         if(abs(wristCurrent - wristTarget) < 3) {
           wristCurrent = wristTarget;
@@ -281,9 +289,9 @@ void printMotorAngles(float angles[4]) {
   
         wristServo.write(wristCurrent);
   
-        lastElbowUpdateTime = currentTime;
+        lastWristUpdateTime = currentTime;
       }
-     // Elbow servo movement
+
 //      if (wristCurrent != wristAngle && currentTime - lastElbowUpdateTime >= elbowStepDelay) {
 //        wristCounter += wristRatio;
 //        if (wristCounter >= 1.0) {
@@ -311,13 +319,17 @@ void printMotorAngles(float angles[4]) {
 
 
 void openGripper(){
-  gripperServo.write(180);
+  //wristServo.write(wristServo.read() - 10);
+  gripperServo.write(160);
+  wristOpen = 1;
 }
 
 
 
 void closeGripper(){
+  //wristServo.write(wristServo.read() + 10);
   gripperServo.write(20);
+  wristOpen = 0;
 }
 
 
@@ -407,7 +419,7 @@ void calibrateBase() {
 float calculateWristAngle(float shoulderAngle, float elbowAngle) {
   // Ensure the wrist remains vertical by compensating for the shoulder and elbow angles
   float prewristAngle = 90 - (shoulderAngle - 180 + elbowAngle);
-  float wristAngle = map(prewristAngle, -180, 0, 170, -10);
+  float wristAngle = map(prewristAngle, -180, 0, 170, -10) - 5;
 
   // Normalize the wrist angle to stay within 0-180 degrees for the servo
   if (wristAngle < 0) {
@@ -417,6 +429,14 @@ float calculateWristAngle(float shoulderAngle, float elbowAngle) {
   if (wristAngle > 180) {
     wristAngle -= 360; // Adjust for servo range
   }
+
+  if (wristOpen == 1) {
+    wristAngle -= wristCorrectionFactor;
+  }
+  // else{
+  //   wristAngle += wristCorrectionFactor;
+  // }
+
 
   return wristAngle;
 }

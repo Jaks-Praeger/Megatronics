@@ -476,7 +476,9 @@ class ChessRobot:
             self.gripper_closed = close
 
         # send command
+        time.sleep(0.5)
         self.send_to_motors(self.current_angles)
+        time.sleep(0.5)
 
 
     def move_to_position(self, x, y, z, avoid_collisions=True):
@@ -823,7 +825,7 @@ def run_chess_robot_demo():
     # 2. Knight to f3
     # print("\nMoving knight from g1 to f3")
     # robot.move_piece('a1', 'a2')
-    # robot.calibrateCoordinates()
+    robot.calibrateCoordinates()
     
     # 3. Queen's pawn opening (d2 to d4)
     # print("\nMoving pawn from d2 to d4")
