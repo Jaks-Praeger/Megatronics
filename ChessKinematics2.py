@@ -70,7 +70,7 @@ class ChessRobot:
         self.z_clearance = 8.0 + self.gripper_height  # cm above pieces for grabbing
         self.z_clearance_moving = self.z_clearance + 15.0  # cm above pieces for moving
 
-        self.sendActualCommands = True
+        self.sendActualCommands = False
 
         if self.sendActualCommands:
             self.ser = self.setup_serial()
@@ -607,35 +607,37 @@ class ChessRobot:
 
         time.sleep(2)
 
-    def capture_piece(self, pos, captured_storage=(35, 35)):
-        """Helper function to capture a piece and update visualization"""
-        # Convert chess position to coordinates
-        to_x, to_y = self.algebraic_to_coordinate(pos)
-        store_x, store_y = captured_storage
+    def capture_piece(self, pos):
+
+        self.move_piece(pos, 'capture')
+        # """Helper function to capture a piece and update visualization"""
+        # # Convert chess position to coordinates
+        # to_x, to_y = self.algebraic_to_coordinate(pos)
+        # store_x, store_y = captured_storage
         
-        # 1. Open gripper
-        self.actuate_gripper(False)
+        # # 1. Open gripper
+        # self.actuate_gripper(False)
         
-        # 2. Move to and pick up the captured piece
-        self.move_to_position(to_x, to_y, self.board_height + self.chess_square_size * 0.3)
-        self.actuate_gripper(True)
+        # # 2. Move to and pick up the captured piece
+        # self.move_to_position(to_x, to_y, self.board_height + self.chess_square_size * 0.3)
+        # self.actuate_gripper(True)
         
-        # 3. Update visualization piece state if enabled
-        if hasattr(self, 'visualizer'):
-            self.visualizer.update_piece_position(pos, None, is_capture=True)
+        # # 3. Update visualization piece state if enabled
+        # if hasattr(self, 'visualizer'):
+        #     self.visualizer.update_piece_position(pos, None, is_capture=True)
         
-        # 4. Lift the captured piece
-        self.move_to_position(to_x, to_y, self.board_height + self.chess_square_size * 0.7, avoid_collisions=False)
+        # # 4. Lift the captured piece
+        # self.move_to_position(to_x, to_y, self.board_height + self.chess_square_size * 0.7, avoid_collisions=False)
         
-        # 5. Move the captured piece to storage area
-        self.move_to_position(store_x, store_y, self.board_height + self.chess_square_size * 0.7)
+        # # 5. Move the captured piece to storage area
+        # self.move_to_position(store_x, store_y, self.board_height + self.chess_square_size * 0.7)
         
-        # 6. Place the captured piece
-        self.move_to_position(store_x, store_y, self.board_height + 0.1, avoid_collisions=False)
-        self.actuate_gripper(False)
+        # # 6. Place the captured piece
+        # self.move_to_position(store_x, store_y, self.board_height + 0.1, avoid_collisions=False)
+        # self.actuate_gripper(False)
         
-        # 7. Lift up from storage area
-        self.move_to_position(store_x, store_y, self.board_height + self.chess_square_size * 0.7, avoid_collisions=False)
+        # # 7. Lift up from storage area
+        # self.move_to_position(store_x, store_y, self.board_height + self.chess_square_size * 0.7, avoid_collisions=False)
 
     def calibrateCoordinates(self):
         """
@@ -826,6 +828,7 @@ def run_chess_robot_demo():
     # print("\nMoving knight from g1 to f3")
     # robot.move_piece('a1', 'a2')
     # robot.calibrateCoordinates()
+    # robot.capture_piece('f3')
     
     while 1:
         move_input = input("enter in old and new position e.g 'a1 b3': ")
@@ -843,7 +846,6 @@ def run_chess_robot_demo():
     
     # 4. Knight captures on e4
     # print("\nCapturing with knight from f3 to e4")
-    # robot.capture_piece('f3', 'e4')
     
     # Save the animation
     # print("\nSaving animation...")
