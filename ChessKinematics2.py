@@ -69,6 +69,7 @@ class ChessRobot:
         self.move_step_size = 3  # degrees per step
         self.z_clearance = 8.0 + self.gripper_height  # cm above pieces for grabbing
         self.z_clearance_moving = self.z_clearance + 15.0  # cm above pieces for moving
+        self.tall_piece_clearance = 2
 
         self.sendActualCommands = False
 
@@ -519,7 +520,7 @@ class ChessRobot:
         x, y = self.algebraic_to_coordinate(pos)
         return self.inverse_kinematics(x, y, self.board_height + self.z_clearance)
 
-    def move_piece(self, from_pos, to_pos, use_calibrated_coords=True):
+    def move_piece(self, from_pos, to_pos, tall_piece=False, use_calibrated_coords=True):
         """Helper function to move a piece and update visualization"""
         # Convert chess positions to coordinates
         if not use_calibrated_coords:
@@ -574,6 +575,11 @@ class ChessRobot:
         # Calculate Z heights for movements
         piece_top_z = self.board_height + self.z_clearance_moving
         hover_z = self.board_height + self.z_clearance_moving
+
+        # Adjust for tall pieces
+        if tall_piece:
+            grip_z += self.tall_piece_clearance
+            place_z += self.tall_piece_clearance
         
         # 1. Open gripper
         self.actuate_gripper(True)
@@ -607,9 +613,9 @@ class ChessRobot:
 
         time.sleep(2)
 
-    def capture_piece(self, pos):
+    def capture_piece(self, pos, tall_piece=False):
 
-        self.move_piece(pos, 'capture')
+        self.move_piece(pos, 'capture', tall_piece)
         # """Helper function to capture a piece and update visualization"""
         # # Convert chess position to coordinates
         # to_x, to_y = self.algebraic_to_coordinate(pos)
@@ -838,7 +844,7 @@ def run_chess_robot_demo():
 
         start_pos, end_pos = move_input.split()
 
-        robot.move_piece(start_pos, end_pos)
+        robot.move_piece(start_pos, end_pos, 1)
     
     # 3. Queen's pawn opening (d2 to d4)
     # print("\nMoving pawn from d2 to d4")
