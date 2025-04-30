@@ -11,18 +11,18 @@ import json  # Add this import at the top of the file
 import re  # Add this import for regex matching
 
 class ChessRobot:
-    def __init__(self, base_height=2.8448,
-                 link1_length=37.2872,
+    def __init__(self, base_height=4.0132, 
+                 link1_length= 37.084,
                  link2_length=36.83, 
-                 gripper_height=16.51,
-                 chess_square_size=4.07, #4.07
-                 board_height=2.5273, #2.5273
-                 board_origin_x=-19.1, #-19.1
-                 board_origin_y=26.035, #31.625
+                 gripper_height=16.8656,
+                 chess_square_size=4.1,
+                 board_height=1.5,
+                 board_origin_x=-20.875,
+                 board_origin_y=28.012,
                  linkage_angle_deg=99.8,
-                 linkage_length=4.9784,
-                 baseDistFromOrigin=1.453642,
-                 gripperDistFromOrigin=3.601466 + 0.70612,
+                 linkage_length=3.81,
+                 baseDistFromOrigin=1.49, ##
+                 gripperDistFromOrigin=3.601466 + 0.70612, ##
                  home_position=(90, 130, 50)):
         
         """
@@ -79,7 +79,7 @@ class ChessRobot:
         if not self.sendActualCommands:
             self.allowAngles = True
 
-    def setup_serial(self, port='COM10', baud_rate=9600):
+    def setup_serial(self, port='COM12', baud_rate=9600):
         """Set up serial connection to Arduino"""
         ser = serial.Serial(port, baud_rate, timeout=1)
         ser.setDTR(False)  # Prevents reset
@@ -472,13 +472,13 @@ class ChessRobot:
             print(f"{'Closing' if close else 'Opening'} gripper")
             # Here you would send the actual gripper command to your hardware
             # self.send_gripper_command(close)
-            time.sleep(0.5)  # Allow time for gripper to actuate
+            time.sleep(0.25)  # Allow time for gripper to actuate
             self.gripper_closed = close
 
         # send command
-        time.sleep(0.5)
+        time.sleep(0.25)
         self.send_to_motors(self.current_angles)
-        time.sleep(0.5)
+        time.sleep(0.25)
 
 
     def move_to_position(self, x, y, z, avoid_collisions=True):
@@ -820,12 +820,23 @@ def run_chess_robot_demo():
     
     # 1. King's pawn opening (e2 to e4)
     # print("\nMoving pawn from e2 to e4")
-    robot.move_piece('a1', 'a4')
+    #robot.move_piece('a1', 'a4')
+
+    while 1:
+        move_input = input("enter in old and new position e.g. 'a1 b2': ")
+
+        if move_input == 'done':
+            break
+        start_pos, end_pos = move_input.split()
+
+        robot.move_piece(start_pos, end_pos)
     
     # 2. Knight to f3
     # print("\nMoving knight from g1 to f3")
     # robot.move_piece('a1', 'a2')
     robot.calibrateCoordinates()
+
+
     
     # 3. Queen's pawn opening (d2 to d4)
     # print("\nMoving pawn from d2 to d4")
