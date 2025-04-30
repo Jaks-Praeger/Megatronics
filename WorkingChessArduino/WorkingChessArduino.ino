@@ -10,6 +10,7 @@ const int BUFFER_SIZE = 64;
 char buffer[BUFFER_SIZE];
 float angles[4];  // Array to store the angles
 float pos = 0;
+float angles2 = 0;
 
 // PIN DEFINITIONS
 const uint8_t elbowServoPin = 12;
@@ -55,9 +56,9 @@ void setup() {
   wristServo.write(45);
   gripperServo.attach(gripperServoPin);
   openGripper();
-  baseStepper.setMaxSpeed(800);  // Steps per second (max value set by arduino clock speed)
+  baseStepper.setMaxSpeed(900);  // Steps per second (max value set by arduino clock speed)
   baseStepper.setAcceleration(600.0);  // Steps per secon^2 (6000 default)
-  shoulderStepper.setMaxSpeed(1200);  // Steps per second (max value set by arduino clock speed) 5000
+  shoulderStepper.setMaxSpeed(1400);  // Steps per second (max value set by arduino clock speed) 5000
   shoulderStepper.setAcceleration(400.0);  // Steps per secon^2 (2000 default)
 
   shoulderStepper.setCurrentPosition(0);
@@ -204,7 +205,7 @@ void printMotorAngles(float angles[4]) {
     
     Serial.println(wristAngle);
     //wristServo.write(wristAngle);
-    
+
     // Calculate maximum number of steps needed by any motor
     long shoulderStepsToGo = shoulderStepper.distanceToGo() / shoulderStepper.speed();
     long baseStepsToGo = baseStepper.distanceToGo() / baseStepper.speed();
@@ -278,19 +279,24 @@ void printMotorAngles(float angles[4]) {
       //   lastElbowUpdateTime = currentTime;
       // }
 
+      // angles2 = map((180-elbowCurrent+22),0,180,0,166);
+      // wristTarget = calculateWristAngle(shoulderStepper.currentPosition()/shoulderStepsPerRev*360, angles2);
+      // wristServo.write(wristTarget);
+
       if (wristCurrent != wristTarget && currentTime - lastWristUpdateTime >= wristStepDelay) {
 
         if(abs(wristCurrent - wristTarget) < 3) {
           wristCurrent = wristTarget;
         }
         else {
-         wristCurrent += wristDirection * wristRatio;
+         wristCurrent += wristDirection * wristRatio * 1.3;
         }
   
         wristServo.write(wristCurrent);
   
         lastWristUpdateTime = currentTime;
       }
+
 
 //      if (wristCurrent != wristAngle && currentTime - lastElbowUpdateTime >= elbowStepDelay) {
 //        wristCounter += wristRatio;

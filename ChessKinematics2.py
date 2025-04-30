@@ -68,7 +68,7 @@ class ChessRobot:
         # Movement parameters
         self.move_step_size = 3  # degrees per step
         self.z_clearance = 8.0 + self.gripper_height  # cm above pieces for grabbing
-        self.z_clearance_moving = self.z_clearance + 10.0  # cm above pieces for moving
+        self.z_clearance_moving = self.z_clearance + 15.0  # cm above pieces for moving
 
         self.sendActualCommands = True
 
@@ -79,7 +79,7 @@ class ChessRobot:
         if not self.sendActualCommands:
             self.allowAngles = True
 
-    def setup_serial(self, port='COM10', baud_rate=9600):
+    def setup_serial(self, port='COM12', baud_rate=9600):
         """Set up serial connection to Arduino"""
         ser = serial.Serial(port, baud_rate, timeout=1)
         ser.setDTR(False)  # Prevents reset
@@ -472,13 +472,13 @@ class ChessRobot:
             print(f"{'Closing' if close else 'Opening'} gripper")
             # Here you would send the actual gripper command to your hardware
             # self.send_gripper_command(close)
-            time.sleep(0.5)  # Allow time for gripper to actuate
+            time.sleep(0.25)  # Allow time for gripper to actuate
             self.gripper_closed = close
 
         # send command
-        time.sleep(0.5)
+        time.sleep(0.25)
         self.send_to_motors(self.current_angles)
-        time.sleep(0.5)
+        time.sleep(0.25)
 
 
     def move_to_position(self, x, y, z, avoid_collisions=True):
@@ -579,7 +579,7 @@ class ChessRobot:
         self.actuate_gripper(True)
         
         # 2. Move above the piece to pick
-        self.move_to_position(from_x, from_y, hover_z)
+        self.move_to_position(from_x, from_y-2, hover_z)
         
         # 3. Lower to grip the piece
         self.move_to_position(from_x, from_y, grip_z, avoid_collisions=False)
@@ -605,7 +605,7 @@ class ChessRobot:
         # 10. Return to home position
         self.move_joints(self.home_position)
 
-        time.sleep(4)
+        time.sleep(2)
 
     def capture_piece(self, pos, captured_storage=(35, 35)):
         """Helper function to capture a piece and update visualization"""
@@ -820,12 +820,22 @@ def run_chess_robot_demo():
     
     # 1. King's pawn opening (e2 to e4)
     # print("\nMoving pawn from e2 to e4")
-    robot.move_piece('a1', 'a4')
+    #robot.move_piece('f3', 'e5')
     
     # 2. Knight to f3
     # print("\nMoving knight from g1 to f3")
     # robot.move_piece('a1', 'a2')
-    robot.calibrateCoordinates()
+    # robot.calibrateCoordinates()
+    
+    while 1:
+        move_input = input("enter in old and new position e.g 'a1 b3': ")
+
+        if move_input == 'done':
+            break
+
+        start_pos, end_pos = move_input.split()
+
+        robot.move_piece(start_pos, end_pos)
     
     # 3. Queen's pawn opening (d2 to d4)
     # print("\nMoving pawn from d2 to d4")
