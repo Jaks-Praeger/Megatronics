@@ -55,9 +55,9 @@ void setup() {
   wristServo.write(45);
   gripperServo.attach(gripperServoPin);
   openGripper();
-  baseStepper.setMaxSpeed(800);  // Steps per second (max value set by arduino clock speed)
+  baseStepper.setMaxSpeed(900);  // Steps per second (max value set by arduino clock speed)
   baseStepper.setAcceleration(600.0);  // Steps per secon^2 (6000 default)
-  shoulderStepper.setMaxSpeed(1200);  // Steps per second (max value set by arduino clock speed) 5000
+  shoulderStepper.setMaxSpeed(1400);  // Steps per second (max value set by arduino clock speed) 5000
   shoulderStepper.setAcceleration(400.0);  // Steps per secon^2 (2000 default)
 
   shoulderStepper.setCurrentPosition(0);
