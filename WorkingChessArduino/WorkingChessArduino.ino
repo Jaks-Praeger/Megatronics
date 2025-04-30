@@ -86,7 +86,7 @@ void setup() {
   calibrateBase();
   calibrateShoulder();
 
-  baseStepper.runToNewPosition(-45.0 /360*baseStepsPerRev);  // Move to the zero position
+  baseStepper.runToNewPosition(-34.0 /360*baseStepsPerRev);  // Move to the zero position
     while(baseStepper.distanceToGo() != 0){}  // Wait for the stepper to finish moving
 
   // Set the hummerous outside limit switch to an interupt pin so it will have imediate control
@@ -186,7 +186,7 @@ void printMotorAngles(float angles[4]) {
     // Map the base angles
     Serial.print("Writing to Base: ");
     Serial.println(angles[0]);
-    pos = map(angles[0],90,270,-45,-225) - 2;
+    pos = map(angles[0],90,270,-45,-225) - 2 + 11;
     baseStepper.moveTo(pos * baseStepsPerRev/360);
     
     //Map the shoulder

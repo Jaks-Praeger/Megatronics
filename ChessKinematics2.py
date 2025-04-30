@@ -71,7 +71,7 @@ class ChessRobot:
         self.z_clearance_moving = self.z_clearance + 15.0  # cm above pieces for moving
         self.tall_piece_clearance = 2
 
-        self.sendActualCommands = False
+        self.sendActualCommands = True
 
         if self.sendActualCommands:
             self.ser = self.setup_serial()
@@ -80,7 +80,7 @@ class ChessRobot:
         if not self.sendActualCommands:
             self.allowAngles = True
 
-    def setup_serial(self, port='COM12', baud_rate=9600):
+    def setup_serial(self, port='COM9', baud_rate=115200):
         """Set up serial connection to Arduino"""
         ser = serial.Serial(port, baud_rate, timeout=1)
         ser.setDTR(False)  # Prevents reset
@@ -578,6 +578,7 @@ class ChessRobot:
 
         # Adjust for tall pieces
         if tall_piece:
+            print("Tall piece!")
             grip_z += self.tall_piece_clearance
             place_z += self.tall_piece_clearance
         
