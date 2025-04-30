@@ -68,7 +68,7 @@ class ChessRobot:
         # Movement parameters
         self.move_step_size = 3  # degrees per step
         self.z_clearance = 8.0 + self.gripper_height  # cm above pieces for grabbing
-        self.z_clearance_moving = self.z_clearance + 10.0  # cm above pieces for moving
+        self.z_clearance_moving = self.z_clearance + 15.0  # cm above pieces for moving
 
         self.sendActualCommands = True
 
@@ -579,7 +579,7 @@ class ChessRobot:
         self.actuate_gripper(True)
         
         # 2. Move above the piece to pick
-        self.move_to_position(from_x, from_y, hover_z)
+        self.move_to_position(from_x, from_y-2, hover_z)
         
         # 3. Lower to grip the piece
         self.move_to_position(from_x, from_y, grip_z, avoid_collisions=False)
@@ -825,7 +825,7 @@ def run_chess_robot_demo():
     # 2. Knight to f3
     # print("\nMoving knight from g1 to f3")
     # robot.move_piece('a1', 'a2')
-    robot.calibrateCoordinates()
+    # robot.calibrateCoordinates()
     
     while 1:
         move_input = input("enter in old and new position e.g 'a1 b3': ")
