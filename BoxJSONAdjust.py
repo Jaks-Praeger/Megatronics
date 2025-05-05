@@ -16,7 +16,7 @@ def capture_and_save():
     cap.release()  # Release the webcam
 
     if ret:
-        cv2.imwrite("captured_chessboard.jpg", frame)  # Save the captured image
+        cv2.imwrite("captured_chessboard2.jpg", frame)  # Save the captured image
         print("Image saved as captured_chessboard.jpg")
     else:
         print("Error: Could not capture image")
@@ -72,7 +72,7 @@ def detect_chessboard_squares(image_path):
     ranks = "87654321"  
 
     # Reverse the order to match OpenCV's detection (Top-Right to Bottom-Left)
-    for col in range(7,-1,-1):  # Move from right to left (h → a)
+    for col in range(8):  # Move from right to left (h → a)
         for row in range(8):  # Move from top to bottom (1 → 8)
             # Warped image coordinates, bottom left, top left, top right, bottom right
            
@@ -93,7 +93,7 @@ def detect_chessboard_squares(image_path):
 
 
     # Save output to JSON file
-    with open("src/new_boxes.json", "w") as file:
+    with open("new_boxes.json", "w") as file:
         json.dump(squares, file, indent=4)
 
     print("Saved chessboard squares to new_boxes.json")
@@ -113,7 +113,7 @@ def detect_chessboard_squares(image_path):
     cv2.imshow('Chessboard Detection', image)
 
     # **Fix: Close after 5 seconds (or press any key)**
-    cv2.waitKey(000)  # Wait for 5 seconds
+    cv2.waitKey(5000)  # Wait for 5 seconds
     cv2.destroyAllWindows()  # Ensure all OpenCV windows close properly
 
 # Usage example

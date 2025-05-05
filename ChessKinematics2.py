@@ -69,7 +69,7 @@ class ChessRobot:
         self.move_step_size = 3  # degrees per step
         self.z_clearance = 8.0 + self.gripper_height  # cm above pieces for grabbing
         self.z_clearance_moving = self.z_clearance + 15.0  # cm above pieces for moving
-        self.tall_piece_clearance = 2
+        self.tall_piece_clearance = 1.5
 
         self.sendActualCommands = True
 
@@ -80,7 +80,7 @@ class ChessRobot:
         if not self.sendActualCommands:
             self.allowAngles = True
 
-    def setup_serial(self, port='COM9', baud_rate=115200):
+    def setup_serial(self, port='COM7', baud_rate=115200):
         """Set up serial connection to Arduino"""
         ser = serial.Serial(port, baud_rate, timeout=1)
         ser.setDTR(False)  # Prevents reset
@@ -473,13 +473,13 @@ class ChessRobot:
             print(f"{'Closing' if close else 'Opening'} gripper")
             # Here you would send the actual gripper command to your hardware
             # self.send_gripper_command(close)
-            time.sleep(0.25)  # Allow time for gripper to actuate
+            time.sleep(0.2)  # Allow time for gripper to actuate
             self.gripper_closed = close
 
         # send command
-        time.sleep(0.25)
+        time.sleep(0.2)
         self.send_to_motors(self.current_angles)
-        time.sleep(0.25)
+        time.sleep(0.2)
 
 
     def move_to_position(self, x, y, z, avoid_collisions=True):
@@ -578,9 +578,12 @@ class ChessRobot:
 
         # Adjust for tall pieces
         if tall_piece:
-            print("Tall piece!")
             grip_z += self.tall_piece_clearance
             place_z += self.tall_piece_clearance
+
+        grip_z -= self.tall_piece_clearance
+        place_z -= self.tall_piece_clearance
+        
         
         # 1. Open gripper
         self.actuate_gripper(True)
